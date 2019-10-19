@@ -18,6 +18,7 @@ my $missingModulEPG = "";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpanm XML::Simple)";
 my @channel_available;
 my %progamm;
+my %HTML;
 
 #####################
 sub EPG_Initialize($) {
@@ -27,6 +28,7 @@ sub EPG_Initialize($) {
 	$hash->{SetFn}                 = "EPG_Set";
 	$hash->{GetFn}                 = "EPG_Get";
 	$hash->{AttrFn}                = "EPG_Attr";
+	$hash->{NotifyFn}              = "EPG_Notify";
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
@@ -110,6 +112,7 @@ sub EPG_Get($$$@) {
 	if (AttrVal($name, "Channels", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Channels", undef) ne "" && AttrVal($name, "Variant", undef)) {
 		$getlist.= "loadEPG_now:noArg ";               # now
 		$getlist.= "loadEPG_Prime:noArg ";             # Primetime
+		$getlist.= "loadEPG_today:noArg ";             # today all
 
 		my $TimeNowMod = $TimeNow;
 		$TimeNowMod =~ s/-|:|\s//g;
@@ -178,46 +181,61 @@ sub EPG_Get($$$@) {
 		}
 
 		if ($cmd =~ /^loadEPG/) {
+			%HTML = ();           # reset hash for HTML
+			my $start = "";       # TV time start
+			my $end = "";         # TV time end
+			my $ch_found = 0;     # counter to verification ch
+			my $data_found = 0;   # counter to verification data
+			my $ch_name = "";     # TV channel name
+			my $title = "";       # TV title
+			my $subtitle = "";    # TV subtitle
+			my $desc = "";        # TV desc
+			my $today_start = ""; # today time start
+			my $today_end = "";   # today time end
+
 			Log3 $name, 4, "$name: Get | $cmd from file";
 
 			$TimeNow =~ s/-|:|\s//g;
 			$TimeNow.= " +0200";                                     # loadEPG_now   20191016150432 +0200
 
 			if ($cmd eq "loadEPG_Prime") {
-				if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	tomorrow
+				if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
 					my @time = split(/-\s:/,FmtDateTime(time()));
 					$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
 					$TimeNow =~ s/-|:|\s//g;
 					$TimeNow.= " +0200";
 					substr($TimeNow, 8) = '201510 +0200';
-				} else {                                               # loadEPG_Prime 20191016201510 +0200	today
+				} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
 					substr($TimeNow, 8) = '201510 +0200';
 				}
 			}
+			
+			if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
+				$today_start = substr($TimeNow,0,8)."000000 +0200";
+				$today_end = substr($TimeNow,0,8)."235959 +0200";
+			}
 
-			if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 | 20191016_210010 +0200 ... 00 - 23
+			if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
 				$cmd2 =~ s/_//g;
 				$cmd2.= '10 +0200';
 				$TimeNow = $cmd2;
 			}
 
-			my $start = "";     # TV time start
-			my $end = "";       # TV time end
-			my $ch_found = 0;   # counter to verification ch
-			my $data_found = 0; # counter to verification data
-			my $ch_name = "";   # TV channel name
-			my $title = "";     # TV title
-			my $subtitle = "";  # TV subtitle
-			my $desc = "";      # TV desc
-			
 			if (-e "/opt/fhem/FHEM/EPG/$DownloadFile") {
 				open (FileCheck,"</opt/fhem/FHEM/EPG/$DownloadFile");
 					while (<FileCheck>) {
 						if ($_ =~ /<programme start="(.*)" stop="(.*)" channel="(.*)"/) {   ## find start | end | channel
 							if ( index($Channels,$progamm{$3}->{name}) >= 0 ) {               ## find in attributes channel
-								if ($TimeNow gt $1 && $TimeNow lt $2) {                         ## EPG_search
-									($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
-									$ch_found++;
+								if ($cmd ne "loadEPG_today") { 
+									if ($TimeNow gt $1 && $TimeNow lt $2) {                       ## Zeitpunktsuche, normal
+										($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
+										$ch_found++;
+									}								
+								} else {                                                        ## Zeitpunktsuche, kompletter Tag
+									if ($today_end gt $1 && $today_start lt $2) {
+										($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
+										$ch_found++;
+									}								
 								}
 							}
 						}
@@ -226,31 +244,39 @@ sub EPG_Get($$$@) {
 						$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                ## find desc
 
 						if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
-							Log3 $name, 3, "$name: $cmd | ch_name  -> $ch_name";
-							Log3 $name, 3, "$name: $cmd | start    -> $start";
-							Log3 $name, 3, "$name: $cmd | end      -> $end";
-							Log3 $name, 3, "$name: $cmd | title    -> $title";
-							Log3 $name, 3, "$name: $cmd | subtitle -> $subtitle";
-							Log3 $name, 3, "$name: $cmd | desc     -> $desc.\n";
+							$data_found++;
+							$HTML{$ch_name}{$data_found}{ch_name} = $ch_name;
+							Log3 $name, 4, "$name: $cmd | ch_name  -> $ch_name";
+							$HTML{$ch_name}{$data_found}{start} = $start;
+							Log3 $name, 4, "$name: $cmd | start    -> $start";
+							$HTML{$ch_name}{$data_found}{end} = $end;
+							Log3 $name, 4, "$name: $cmd | end      -> $end";
+							$HTML{$ch_name}{$data_found}{title} = $title;
+							Log3 $name, 4, "$name: $cmd | title    -> $title";
+							$HTML{$ch_name}{$data_found}{subtitle} = $subtitle;
+							Log3 $name, 4, "$name: $cmd | subtitle -> $subtitle";
+							$HTML{$ch_name}{$data_found}{desc} = $desc;
+							Log3 $name, 4, "$name: $cmd | desc     -> $desc.\n";
 
 							$ch_found = 0;
 							$ch_name = "";
 							$title = "";
 							$subtitle = "";
 							$desc = "";
-							$data_found++;
 						}
 					}
 				close FileCheck;
 
-				$state = "all channel information loaded" if ($data_found != 0);
-				$state = "no channel information available!" if ($data_found == 0);
+				$hash->{STATE_data} = "all channel information loaded" if ($data_found != 0);
+				$hash->{STATE_data} = "no channel information available!" if ($data_found == 0);
 			} else {
-				$state = "ERROR: loaded Information Canceled";
+				readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
 				Log3 $name, 3, "$name: $cmd | error, file $DownloadFile no found at ./opt/fhem/FHEM/EPG";
 				return "ERROR: no file found!";
 			}
-			readingsSingleUpdate($hash, "state", $state, 1);
+			
+			#Log3 $name, 3, "$name: ".Dumper\%HTML;
+			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %HTML  != 0);
 			return undef;
 		}
 	}
@@ -296,17 +322,18 @@ sub EPG_FW_Detail($@) {
 
 	if (scalar(@channel_available) > 0) {
 		if ($FW_detail) {
+			### Control panel ###
 			$ret .= "<div class='makeTable wide'><span>Control panel</span>
 							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}' class='block wide'>
 							<tr class='even'>";
 
 			$ret .= "<td><a href='#button1' id='button1'>list of all available channels</a></td>";
 			$ret .= "<td> readed channels:". scalar(@channel_available) ."</td>";
-			$ret .= "<td> selected channels: ". $cnt ."</td>";		
-		} else {
-			$ret .= "<div class='makeTable wide'><table><tr>"
+			$ret .= "<td> selected channels: ". $cnt ."</td>";
+			$ret .= "</tr></table></div>";
 		}
 
+		### Javascript ###
 		$ret .= '
 			<script>
 
@@ -362,14 +389,49 @@ sub EPG_FW_Detail($@) {
 
 		</script>';
 
-		$ret .= "</tr></table></div>";
-		$ret .= "Programme folgen hier";
+		### HTML ###
+		$ret .= "<center>- no EPG Data -</center>" if (scalar keys %HTML  == 0);
+		if (scalar keys %HTML != 0) {
+			my $ch_name = "";
+			my $start = "";
+			my $end = "";
+			my $title = "";
+			my $subtitle = "";
+			my $desc = "";
+
+			$ret .= "<table>";
+			$ret .= "<tr style=\"text-decoration:underline\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th></tr>";
+	
+			foreach my $ch (sort keys %HTML) {
+				foreach my $value (sort {$a <=> $b} keys %{$HTML{$ch}}) {
+					foreach my $d (keys %{$HTML{$ch}{$value}}) {
+						$ch_name = $HTML{$ch}{$value}{$d} if ($d eq "ch_name");
+						$start = substr($HTML{$ch}{$value}{$d},8,2).":".substr($HTML{$ch}{$value}{$d},10,2) if ($d eq "start");
+						$end = substr($HTML{$ch}{$value}{$d},8,2).":".substr($HTML{$ch}{$value}{$d},10,2) if ($d eq "end");
+						$title = $HTML{$ch}{$value}{$d} if ($d eq "title");
+						$desc = $HTML{$ch}{$value}{$d} if ($d eq "desc");					
+					}
+					## Darstellung als Link wenn Sendungsbeschreibung ##
+					if ($desc ne "") {
+						if (grep /"/, $desc) {
+							Log3 $name, 3, "MOD NEED !!!!!! YES";
+							$desc =~ s/"//g;
+						}
+						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog('$desc')\">$title</a></td></tr>";
+					} else {
+						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
+					}
+				}
+			}			
+
+			$ret .= "</table>";
+		}
 	}
 
 	return $ret;
 }
 
-#####################
+##################### (Aufbau HTML Tabelle available channels)
 sub EPG_FW_Channels {
 	my $name = shift;
 	my $ret = "";
@@ -395,7 +457,7 @@ sub EPG_FW_Channels {
 	return $ret;
 }
 
-#####################
+##################### (Anpassung Attribute Channels)
 sub EPG_FW_Attr_Channels {
 	my $name = shift;
 	my $hash = $defs{$name};
@@ -433,25 +495,33 @@ sub EPG_ParseHttpResponse($$$) {
 	my $HttpResponse = "";
 	my $state = "no information received";
 	my $reload = 0;
+	my $FileDate = undef;
 
 	Log3 $name, 5, "$name: EPG_ParseHttpResponse - error: $err";
 	Log3 $name, 5, "$name: EPG_ParseHttpResponse - http code: ".$http_param->{code};
 
-	if ($err ne "") {                                                       # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
+	if ($err ne "") {                                                          # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 		$HttpResponse = $err;
 		Log3 $name, 3, "$name: EPG_ParseHttpResponse - error: $err";
-	} elsif ($http_param->{code} ne "200") {                                # HTTP code
+	} elsif ($http_param->{code} ne "200") {                                   # HTTP code
 		$HttpResponse = "DownloadFile $DownloadFile was not found on URL" if (grep /$DownloadFile\swas\snot\sfound/, $data);
 		$HttpResponse = "DownloadURL was not found" if (grep /URL\swas\snot\sfound/, $data);
 		Log3 $name, 3, "$name: EPG_ParseHttpResponse - error:\n\n$data";
-	} elsif ($http_param->{code} eq "200" && $data ne "") {                 # wenn die Abfrage erfolgreich war ($data enthält die Ergebnisdaten des HTTP Aufrufes)
+	} elsif ($http_param->{code} eq "200" && $data ne "") {                    # wenn die Abfrage erfolgreich war ($data enthält die Ergebnisdaten des HTTP Aufrufes)
    	my $filename = "FHEM/EPG/$DownloadFile";
-		open(my $file, ">", $filename);                                       # write file
+		open(my $file, ">", $filename);                                          # Datei schreiben
 			print $file $data;
 		close $file;
 
-		qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1) if ($DownloadFile =~ /.*\.xz$/ && $Variant eq "Ryteg"); # Unpack file
+		if ($Variant eq "Ryteg") {
+			if ($DownloadFile =~ /.*\.xz$/) {
+				qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                    # Datei Unpack
+				$DownloadFile = substr($DownloadFile,0,-3);                          # Dateiname nach Unpack
+			}
+		}
 
+		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);       # Datei Eigenschaften
+		$FileDate = FmtDateTime($stat_DownloadFile[9]);                          # Letzte Änderungszeit
 		$HttpResponse = "downloaded";
 		$state = "information received";
 		$reload++;
@@ -460,11 +530,42 @@ sub EPG_ParseHttpResponse($$$) {
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($reload != 0);
 
 	readingsBeginUpdate($hash);
-	readingsBulkUpdate($hash, "HttpResponse", $HttpResponse);            # download information
-	readingsBulkUpdate($hash, "state", $state);          # state
+	readingsBulkUpdate($hash, "HttpResponse", $HttpResponse);                  # HttpResponse Status
+	readingsBulkUpdate($hash, "DownloadFile_date", $FileDate) if ($FileDate);  # Letzte Änderungszeit
+	readingsBulkUpdate($hash, "state", $state);
 	readingsEndUpdate($hash, 1);
 
 	HttpUtils_Close($http_param);
+}
+
+#####################
+sub EPG_Notify($$) {
+	my ($hash, $dev_hash) = @_;
+	my $name = $hash->{NAME};
+	my $typ = $hash->{TYPE};
+	return "" if(IsDisabled($name));	                                         # Return without any further action if the module is disabled
+	my $devName = $dev_hash->{NAME};	                                         # Device that created the events
+	my $events = deviceEvents($dev_hash, 1);
+	my $Variant = AttrVal($name, "Variant", undef);
+	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
+
+	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
+		Log3 $name, 5, "$name: Notify is running and starting $name";
+
+		if($Variant) {
+			my $FileDate = "not known";
+
+			if ($Variant eq "Ryteg" && $DownloadFile) {
+				if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) {
+					my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3));  # Datei eigenschaften
+					$FileDate = FmtDateTime($stat_DownloadFile[9]);                                  # Letzte Änderungszeit
+				}
+				readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
+			}
+		}
+	}
+
+	return undef;
 }
 
 # Eval-Rückgabewert für erfolgreiches
