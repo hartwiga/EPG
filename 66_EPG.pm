@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-09-27 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-10-19 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -390,7 +390,8 @@ sub EPG_FW_Detail($@) {
 		</script>';
 
 		### HTML ###
-		$ret .= "<center>- no EPG Data -</center>" if (scalar keys %HTML  == 0);
+		
+		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if (scalar keys %HTML  == 0);
 		if (scalar keys %HTML != 0) {
 			my $ch_name = "";
 			my $start = "";
@@ -398,9 +399,10 @@ sub EPG_FW_Detail($@) {
 			my $title = "";
 			my $subtitle = "";
 			my $desc = "";
+			my $cnt_infos = 0;
 
-			$ret .= "<table>";
-			$ret .= "<tr style=\"text-decoration:underline\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th></tr>";
+			$ret .= "<div id=\"table\"><table class=\"block wide\">";
+			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th></tr>";
 	
 			foreach my $ch (sort keys %HTML) {
 				foreach my $value (sort {$a <=> $b} keys %{$HTML{$ch}}) {
@@ -411,17 +413,20 @@ sub EPG_FW_Detail($@) {
 						$title = $HTML{$ch}{$value}{$d} if ($d eq "title");
 						$desc = $HTML{$ch}{$value}{$d} if ($d eq "desc");					
 					}
+					$cnt_infos++;
 					## Darstellung als Link wenn Sendungsbeschreibung ##
+					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
 					if ($desc ne "") {
 						$desc =~ s/"/&quot;/g if (grep /"/, $desc); # "
-						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
+						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
 					} else {
-						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
+						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
 					}
+					
 				}
 			}			
 
-			$ret .= "</table>";
+			$ret .= "</table></div>";
 		}
 	}
 
