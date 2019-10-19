@@ -413,11 +413,8 @@ sub EPG_FW_Detail($@) {
 					}
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					if ($desc ne "") {
-						if (grep /"/, $desc) {
-							Log3 $name, 3, "MOD NEED !!!!!! YES";
-							$desc =~ s/"//g;
-						}
-						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog('$desc')\">$title</a></td></tr>";
+						$desc =~ s/"/&quot;/g if (grep /"/, $desc); # "
+						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
 					} else {
 						$ret .= "<tr><td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
 					}
