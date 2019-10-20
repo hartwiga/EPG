@@ -225,7 +225,8 @@ sub EPG_Get($$$@) {
 				open (FileCheck,"</opt/fhem/FHEM/EPG/$DownloadFile");
 					while (<FileCheck>) {
 						if ($_ =~ /<programme start="(.*)" stop="(.*)" channel="(.*)"/) {   ## find start | end | channel
-							if ( index($Channels,$progamm{$3}->{name}) >= 0 ) {               ## find in attributes channel
+							my $search = $progamm{$3}->{name};
+							if (grep /$search($|,)/, $Channels) {                             ## find in attributes channel
 								if ($cmd ne "loadEPG_today") { 
 									if ($TimeNow gt $1 && $TimeNow lt $2) {                       ## Zeitpunktsuche, normal
 										($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
@@ -417,7 +418,9 @@ sub EPG_FW_Detail($@) {
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
 					if ($desc ne "") {
-						$desc =~ s/"/&quot;/g if (grep /"/, $desc); # "
+						#Log3 $name, 3, "$name: $desc";
+						$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
+						$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
 						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
 					} else {
 						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
