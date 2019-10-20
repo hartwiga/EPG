@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-10-19 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-10-20 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -600,17 +600,24 @@ This is an example web module.<br>
 <a name="EPG"></a>
 <h3>EPG Modul</h3>
 <ul>
-Das ist ein BeispielWeb Modul.<br><br>
-
-http://www.vuplus-community.net/rytec/rytecDE_Basic.xz<br>
-http://www.xmltvepg.nl/rytecDE_Basic.xz<br>
-http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz<br>
-http://www.vuplus-community.net/rytec/rytecDE_Common.xz<br>
-http://www.xmltvepg.nl/rytecDE_Common.xz<br>
-http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz<br>
-http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz<br>
-http://www.xmltvepg.nl/rytecDE_SportMovies.xz<br>
-http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz<br>
+Das EPG Modul holt TV - Sendungsinformationen aus verschiedenen Quellen.<br><br>
+<ul><u>Derzeit werden folgende Dienste unterstützt:</u>
+	<li>Rytec<br><br>
+			bekannte Quellen:<br>
+			<ul><li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_Basic.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz</li>
+					<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_Common.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz</li>
+					<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz</li>
+			</ul>
+	</li>
+	<li> ... </li>
+</ul>
+<br><br>
 
 </ul>
 =end html_DE
