@@ -16,6 +16,7 @@ use Data::Dumper;
 
 my $missingModulEPG = "";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpanm XML::Simple)";
+#eval "use qw(gzip)" or $missingModulEPG .= "gzip "; ## BUG !!!! need to check 
 my @channel_available;
 my %progamm;
 my %HTML;
@@ -32,7 +33,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:Ryteg Channels";
+	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:IPTV_XML,Ryteg Channels";
 												             #$readingFnAttributes;
 }
 
@@ -105,8 +106,14 @@ sub EPG_Get($$$@) {
 	my $Variant = AttrVal($name, "Variant", undef);
 	my $TimeNow = FmtDateTime(time());
 	
-	if ($Variant && $Variant eq "Ryteg") {
-		$getlist.= "available_channels:noArg " if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3) && $DownloadURL && $DownloadFile);	
+	if ($Variant) {
+		if ($Variant eq "Ryteg") {
+			$getlist.= "available_channels:noArg " if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3) && $DownloadURL && $DownloadFile);
+		}
+
+		if ($Variant eq "IPTV_XML") {
+			$getlist.= "available_channels:noArg " if ((-e "/opt/fhem/FHEM/EPG/".$DownloadFile) || (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) && $DownloadURL && $DownloadFile);
+		}
 	}
 
 	if (AttrVal($name, "Channels", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Channels", undef) ne "" && AttrVal($name, "Variant", undef)) {
@@ -147,15 +154,23 @@ sub EPG_Get($$$@) {
 		return undef;
 	}
 
-	if ($Variant && $Variant eq "Ryteg") {
-		$DownloadFile = substr($DownloadFile,0,index($DownloadFile,".")) if (index($DownloadFile,".") != 0);
+	if ($Variant && $cmd ne "?") {
+		if (index($DownloadFile,".") != 0 && $Variant eq "Ryteg") {
+			$DownloadFile = substr($DownloadFile,0,index($DownloadFile,"."));
+		}
+
+		if ($Variant eq "IPTV_XML") {
+			$DownloadFile = substr($DownloadFile,0,index($DownloadFile,".gz")) if (index($DownloadFile,".xml.gz") != 0);
+			$DownloadFile = $DownloadFile if (index($DownloadFile,".xml") != 0);
+		}
+
 		my $ch_id;
 
 		if ($cmd eq "available_channels") {
-			Log3 $name, 4, "$name: Get | $cmd read file $DownloadFile";
+			Log3 $name, 4, "$name: Get | $cmd read file $DownloadFile via $Variant variant";
 			@channel_available = ();
 			%progamm = ();
-			
+
 			if (-e "/opt/fhem/FHEM/EPG/$DownloadFile") {
 				open (FileCheck,"</opt/fhem/FHEM/EPG/$DownloadFile");
 					while (<FileCheck>) {
@@ -302,6 +317,12 @@ sub EPG_Attr() {
 		if ($attrName eq "DownloadURL") {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
+		}
+
+		## changed attribute -> reset information ##
+		if ($attrName eq "DownloadURL" || $attrName eq "DownloadFile" || $attrName eq "Variant") {
+			@channel_available = ();
+			%progamm = ();
 		}
 	}
 }
@@ -470,7 +491,13 @@ sub EPG_FW_Attr_Channels {
 
 	Log3 $name, 4, "$name: FW_Attr_Channels is running";
 	CommandAttr($hash,"$name Channels $Channels") if ($Channels ne "");
-	CommandDeleteAttr($hash,"$name Channels") if ($Channels eq "");
+
+	if ($Channels eq "") {
+		@channel_available = ();
+		%progamm = ();
+		CommandDeleteAttr($hash,"$name Channels");
+		readingsSingleUpdate($hash, "state", "no channels selected", 1);
+	}
 }
 
 #####################
@@ -523,6 +550,10 @@ sub EPG_ParseHttpResponse($$$) {
 				qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                    # Datei Unpack
 				$DownloadFile = substr($DownloadFile,0,-3);                          # Dateiname nach Unpack
 			}
+		} elsif ($Variant eq "IPTV_XML") {
+			if ($DownloadFile =~ /.*\Q.xml.gz\E$/) {
+				qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                # Datei Unpack
+			}
 		}
 
 		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);       # Datei Eigenschaften
@@ -551,24 +582,32 @@ sub EPG_Notify($$) {
 	return "" if(IsDisabled($name));	                                         # Return without any further action if the module is disabled
 	my $devName = $dev_hash->{NAME};	                                         # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
+	my $FileDate = "not known";
 	my $Variant = AttrVal($name, "Variant", undef);
+	my $Variant_stat = "";
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting $name";
 
 		if($Variant) {
-			my $FileDate = "not known";
-			
-			if ($Variant eq "Ryteg") {
-				if ($DownloadFile) {
-					if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) {
-						my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3));  # Datei eigenschaften
-						$FileDate = FmtDateTime($stat_DownloadFile[9]);                                  # Letzte Änderungszeit
-					}
-					readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
-					CommandGet($hash,"$name available_channels");
+			if ($DownloadFile) {
+				if ($Variant eq "Ryteg" && (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3))) {
+					$Variant_stat = "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3);
 				}
+
+				if ($Variant eq "IPTV_XML") {
+					if ($DownloadFile =~ /.*\Q.xml.gz\E$/ && (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3))) {
+						$Variant_stat = "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3);
+					} elsif ($DownloadFile =~ /.*\Q.xml\E$/ && (-e "/opt/fhem/FHEM/EPG/".$DownloadFile)) {
+						$Variant_stat = "/opt/fhem/FHEM/EPG/".$DownloadFile;
+					}
+				}
+
+				my @stat_DownloadFile = stat($Variant_stat) if ($Variant_stat ne "");      # Datei eigenschaften
+				$FileDate = FmtDateTime($stat_DownloadFile[9]) if ($Variant_stat ne "");   # Letzte Änderungszeit
+				readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
+				CommandGet($hash,"$name available_channels") if ($Variant_stat ne "");
 			}
 		}
 	}
@@ -603,15 +642,16 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 <ul><u>Currently the following services are supported:</u>
 	<li>Rytec (Rytec EPG Downloader - slightly different in Germany)<br><br>
 			well-known sources:<br>
-			<ul><li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_Basic.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz</li>
-					<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_Common.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz</li>
-					<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz</li>
+			<ul>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 			</ul><br>
 	</li>
 	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
@@ -666,15 +706,17 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 <ul><u>Derzeit werden folgende Dienste unterst&uuml;tzt:</u>
 	<li>Rytec (Rytec EPG Downloader - gering abweichend in Deutschland)<br><br>
 			bekannte Quellen:<br>
-			<ul><li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_Basic.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz</li>
-					<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_Common.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz</li>
-					<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz</li>
-					<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz</li>
-					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz</li>
+			<ul>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li><a href="https://rytec.ricx.nl/epg_data/">https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003;)</small></li>
 			</ul><br>
 	</li>
 	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
