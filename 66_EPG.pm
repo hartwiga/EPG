@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-10-20 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-10-22 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -559,13 +559,16 @@ sub EPG_Notify($$) {
 
 		if($Variant) {
 			my $FileDate = "not known";
-
-			if ($Variant eq "Ryteg" && $DownloadFile) {
-				if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) {
-					my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3));  # Datei eigenschaften
-					$FileDate = FmtDateTime($stat_DownloadFile[9]);                                  # Letzte Änderungszeit
+			
+			if ($Variant eq "Ryteg") {
+				if ($DownloadFile) {
+					if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) {
+						my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3));  # Datei eigenschaften
+						$FileDate = FmtDateTime($stat_DownloadFile[9]);                                  # Letzte Änderungszeit
+					}
+					readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
+					CommandGet($hash,"$name available_channels");
 				}
-				readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
 			}
 		}
 	}
@@ -581,17 +584,70 @@ sub EPG_Notify($$) {
 # Beginn der Commandref
 
 =pod
-=item [helper|device|command]
-=item summary Kurzbeschreibung in Englisch was MYMODULE steuert/unterstützt
-=item summary_DE Kurzbeschreibung in Deutsch was MYMODULE steuert/unterstützt
+=item [helper]
+=item summary TV-EPG Guide
+=item summary_DE TV-EPG Guide
 
 =begin html
 
 <a name="EPG"></a>
-<h3>EPG modul</h3>
+<h3>EPG Modul</h3>
 <ul>
-This is an example web module.<br>
+The EPG module fetches the TV broadcast information from various sources.<br>
+This is a module which retrieves the data for an electronic program guide and displays it immediately. (example: alternative for HTTPMOD + Readingsgroup & other)<br><br>
+<i>Depending on the source and host country, the information can be slightly differentiated.<br> Each variant has its own read-in routine. When new sources become known, the module can be extended at any time.</i>
+<br><br>
+You have to choose a source and only then can the data of the TV Guide be displayed.<br>
+The specifications for the attribute Variant | DownloadFile and DownloadURL are mandatory.
+<br><br>
+<ul><u>Currently the following services are supported:</u>
+	<li>Rytec (Rytec EPG Downloader - slightly different in Germany)<br><br>
+			well-known sources:<br>
+			<ul><li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_Basic.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz</li>
+					<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_Common.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz</li>
+					<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz</li>
+					<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz</li>
+					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz</li>
+			</ul><br>
+	</li>
+	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
+	<li> xmltv.se (<a href="https://xmltv.se">Provides XMLTV schedules for Europe</a>) </li>
+	
 </ul>
+<br><br>
+
+<b>Define</b><br>
+	<ul><code>define &lt;NAME&gt; EPG</code></ul>
+<br><br>
+
+<b>Get</b><br>
+	<ul>
+		<a name="available_channels"></a>
+		<li>available_channels: retrieves all available channels</li><a name=""></a>
+		<a name="loadEPG_now"></a>
+		<li>loadEPG_now: let the EPG data of the selected channels at the present time</li><a name=""></a>
+		<a name="loadEPG_Prime"></a>
+		<li>loadEPG_Prime: let the EPG data of the selected channels be at PrimeTime 20:15</li><a name=""></a>
+		<a name="loadEPG_today"></a>
+		<li>loadEPG_today: let the EPG data of the selected channels be from the current day</li><a name=""></a>
+	</ul>
+<br><br>
+
+<b>Attribute</b><br>
+	<ul><li><a href="#disable">disable</a></li></ul><br>
+	<ul><li><a name="Channels">Channels</a><br>
+	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired channels.<br>
+	<i>Normally you do not have to edit this attribute manually.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="DownloadFile">DownloadFile</a><br>
+	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
+	<ul><li><a name="DownloadURL">DownloadURL</a><br>
+	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
+	<ul><li><a name="Variant">Variant</a><br>
+	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul>
 =end html
 
 
@@ -600,9 +656,15 @@ This is an example web module.<br>
 <a name="EPG"></a>
 <h3>EPG Modul</h3>
 <ul>
-Das EPG Modul holt TV - Sendungsinformationen aus verschiedenen Quellen.<br><br>
-<ul><u>Derzeit werden folgende Dienste unterstützt:</u>
-	<li>Rytec<br><br>
+Das EPG Modul holt die TV - Sendungsinformationen aus verschiedenen Quellen.<br>
+Es handelt sich hiermit um einen Modul welches die Daten f&uuml;r einen elektronischen Programmf&uuml;hrer abruft und sofort darstellt. (Bsp: Alternative f&uuml;r HTTPMOD + Readingsgroup & weitere)<br><br>
+<i>Je nach Quelle und Aufnahmeland k&ouml;nnen die Informationen bei Ihnen geringf&uuml;gig abweichen.<br> Jede Variante besitzt ihre eigene Einleseroutine. Beim bekanntwerden neuer Quellen kann das Modul jederzeit erweitert werden.</i>
+<br><br>
+Sie m&uuml;ssen sich f&uuml;r eine Quelle entscheiden und erst danach k&ouml;nnen Daten des TV-Guides dargestellt werden.<br>
+Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind zwingend notwendig.
+<br><br>
+<ul><u>Derzeit werden folgende Dienste unterst&uuml;tzt:</u>
+	<li>Rytec (Rytec EPG Downloader - gering abweichend in Deutschland)<br><br>
 			bekannte Quellen:<br>
 			<ul><li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz</li>
 					<li>http://www.xmltvepg.nl/rytecDE_Basic.xz</li>
@@ -613,13 +675,42 @@ Das EPG Modul holt TV - Sendungsinformationen aus verschiedenen Quellen.<br><br>
 					<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz</li>
 					<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz</li>
 					<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz</li>
-			</ul>
+			</ul><br>
 	</li>
-	<li> ... </li>
+	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
+	<li> xmltv.se (<a href="https://xmltv.se">Provides XMLTV schedules for Europe</a>) </li>
+	
 </ul>
 <br><br>
 
-</ul>
+<b>Define</b><br>
+	<ul><code>define &lt;NAME&gt; EPG</code></ul>
+<br><br>
+
+<b>Get</b><br>
+	<ul>
+		<a name="available_channels"></a>
+		<li>available_channels: ruft alle verf&uuml;gbaren Kan&auml;le ab</li><a name=""></a>
+		<a name="loadEPG_now"></a>
+		<li>loadEPG_now: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom jetzigen Zeitpunkt</li><a name=""></a>
+		<a name="loadEPG_Prime"></a>
+		<li>loadEPG_Prime: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
+		<a name="loadEPG_today"></a>
+		<li>loadEPG_today: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
+	</ul>
+<br><br>
+
+<b>Attribute</b><br>
+	<ul><li><a href="#disable">disable</a></li></ul><br>
+	<ul><li><a name="Channels">Channels</a><br>
+	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschten Kan&auml;le definierte.<br>
+	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="DownloadFile">DownloadFile</a><br>
+	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
+	<ul><li><a name="DownloadURL">DownloadURL</a><br>
+	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
+	<ul><li><a name="Variant">Variant</a><br>
+	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul>
 =end html_DE
 
 # Ende der Commandref
