@@ -1,10 +1,17 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-10-22 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-10-26 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
 #
 # 2019 - HomeAuto_User & elektron-bbs
+#
+#################################################################
+# Varianten der Informationen:
+# *.gz      -> ohne & mit Dateiendung nach unpack
+# *.xml     -> ohne unpack
+# *.xml.gz  -> mit Dateiendung xml nach unpack
+# *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 
 package main;
@@ -16,7 +23,7 @@ use Data::Dumper;
 
 my $missingModulEPG = "";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpanm XML::Simple)";
-#eval "use qw(gzip)" or $missingModulEPG .= "gzip "; ## BUG !!!! need to check 
+
 my @channel_available;
 my %progamm;
 my %HTML;
@@ -33,7 +40,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:IPTV_XML,Ryteg Channels";
+	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se Channels";
 												             #$readingFnAttributes;
 }
 
@@ -103,17 +110,12 @@ sub EPG_Get($$$@) {
 	my $Channels = AttrVal($name, "Channels", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
+	my $EPG_file_name = InternalVal($name, "EPG_file_name", undef);
 	my $Variant = AttrVal($name, "Variant", undef);
 	my $TimeNow = FmtDateTime(time());
 	
 	if ($Variant) {
-		if ($Variant eq "Ryteg") {
-			$getlist.= "available_channels:noArg " if (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3) && $DownloadURL && $DownloadFile);
-		}
-
-		if ($Variant eq "IPTV_XML") {
-			$getlist.= "available_channels:noArg " if ((-e "/opt/fhem/FHEM/EPG/".$DownloadFile) || (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3)) && $DownloadURL && $DownloadFile);
-		}
+		$getlist.= "available_channels:noArg " if (InternalVal($name, "EPG_file_age", undef) && InternalVal($name, "EPG_file_age", undef) ne "unknown or no file found");
 	}
 
 	if (AttrVal($name, "Channels", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Channels", undef) ne "" && AttrVal($name, "Variant", undef)) {
@@ -136,13 +138,12 @@ sub EPG_Get($$$@) {
 		}
 	}
 
+	my $ch_id;
 	my $obj;
 	my $state;
 	my $xml;
 
 	if ($cmd ne "?") {
-		Log3 $name, 4, "$name: Get | $cmd";	
-		return "ERROR: no Attribute Variant defined - Please check!" if (!$Variant);
 		return "ERROR: no Attribute DownloadURL or DownloadFile defined - Please check!" if (!$DownloadURL || !$DownloadFile);
 		return "ERROR: you need ".$missingModulEPG."package to use this command!" if ($missingModulEPG ne "");
 		return "ERROR: You need the directory ./FHEM/EPG to download!" if (! -d "FHEM/EPG");
@@ -154,147 +155,198 @@ sub EPG_Get($$$@) {
 		return undef;
 	}
 
-	if ($Variant && $cmd ne "?") {
-		if (index($DownloadFile,".") != 0 && $Variant eq "Ryteg") {
-			$DownloadFile = substr($DownloadFile,0,index($DownloadFile,"."));
-		}
+	if ($cmd eq "available_channels") {
+		Log3 $name, 4, "$name: Get | $cmd read file $EPG_file_name";
+		return "ERROR: no EPG_file_name" if !($EPG_file_name);
 
-		if ($Variant eq "IPTV_XML") {
-			$DownloadFile = substr($DownloadFile,0,index($DownloadFile,".gz")) if (index($DownloadFile,".xml.gz") != 0);
-			$DownloadFile = $DownloadFile if (index($DownloadFile,".xml") != 0);
-		}
+		@channel_available = ();
+		%progamm = ();
 
-		my $ch_id;
+		if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
+			open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+				while (<FileCheck>) {
+					# <tv generator-info-name="Rytec" generator-info-url="http://forums.openpli.org">
+					$hash->{EPG_file_format} = "Rytec" if ($_ =~ /.*generator-info-name="Rytec".*/);
+					# <tv source-data-url="http://api.tvprofil.net/" source-info-name="TvProfil API v1.7 - XMLTV" source-info-url="https://tvprofil.com">
+					$hash->{EPG_file_format} = "TvProfil_XMLTV" if ($_ =~ /.*source-info-name="TvProfil.*/);
+					# <tv generator-info-name="WebGrab+Plus/w MDB &amp; REX Postprocess -- version V2.1.5 -- Jan van Straaten" generator-info-url="http://www.webgrabplus.com">
+					$hash->{EPG_file_format} = "WebGrab+Plus" if ($_ =~ /.*generator-info-name="WebGrab+Plus.*/);
+					#XMLTV.se       <tv generator-info-name="Vind 2.52.12" generator-info-url="https://xmltv.se">
+					$hash->{EPG_file_format} = "XMLTV.se" if ($_ =~ /.*generator-info-url="https:\/\/xmltv.se.*/);
 
-		if ($cmd eq "available_channels") {
-			Log3 $name, 4, "$name: Get | $cmd read file $DownloadFile via $Variant variant";
-			@channel_available = ();
-			%progamm = ();
-
-			if (-e "/opt/fhem/FHEM/EPG/$DownloadFile") {
-				open (FileCheck,"</opt/fhem/FHEM/EPG/$DownloadFile");
-					while (<FileCheck>) {
-						$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
-						if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
-							Log3 $name, 4, "$name: Get | $cmd id: $ch_id -> display_name: ".$1;
-							$progamm{$ch_id}{name} = $1;
-							push(@channel_available,$1);
-						}
+					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
+					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
+						Log3 $name, 5, "$name: Get | $cmd id: $ch_id -> display_name: ".$1;
+						$progamm{$ch_id}{name} = $1;
+						push(@channel_available,$1);
 					}
-				close FileCheck;
+				}
+			close FileCheck;
 
-				@channel_available = sort @channel_available;
-				$state = "available channels loaded";
-				readingsSingleUpdate($hash, "state", $state, 1);
-				FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
-			} else {
-				$state = "ERROR: $Variant Canceled";
-				Log3 $name, 3, "$name: $cmd | error, file $DownloadFile no found at ./opt/fhem/FHEM/EPG";
-				return "ERROR: no file found!";
-			}
-			return undef;
+			@channel_available = sort @channel_available;
+			$state = "available channels loaded";
+			CommandAttr($hash,"$name Variant $hash->{EPG_file_format}") if ($hash->{EPG_file_format});		# setzt Variante von EPG_File
+			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+			readingsSingleUpdate($hash, "state", $state, 1);
+		} else {
+			$state = "ERROR: $Variant Canceled";
+			Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+			return "ERROR: no file found!";
+		}
+		return undef;
+	}
+
+	if ($cmd =~ /^loadEPG/) {
+		%HTML = ();                # reset hash for HTML
+		my $start = "";            # TV time start
+		my $end = "";              # TV time end
+		my $ch_found = 0;          # counter to verification ch
+		my $data_found = 0;        # counter to verification data
+		my $ch_name = "";          # TV channel name
+		my $title = "";            # TV title
+		my $subtitle = "";         # TV subtitle
+		my $desc = "";             # TV desc
+		my $today_start = "";      # today time start
+		my $today_end = "";        # today time end
+		my $hour_diff_read = "";   # hour diff from file
+
+		Log3 $name, 4, "$name: $cmd from file $EPG_file_name";
+		#Log3 $name, 3, "$name: Get | $TimeNow";
+
+		my $off_h = 0;
+		my @local = (localtime(time+$off_h*60*60));
+		my @gmt = (gmtime(time+$off_h*60*60));
+		my $TimeLocaL_GMT_Diff = $gmt[2]-$local[2] + ($gmt[5] <=> $local[5] || $gmt[7] <=> $local[7])*24;
+		if ($TimeLocaL_GMT_Diff < 0) {
+			$TimeLocaL_GMT_Diff = abs($TimeLocaL_GMT_Diff);
+			$TimeLocaL_GMT_Diff = "+".sprintf("%02s", abs($TimeLocaL_GMT_Diff))."00";
+		} else {
+			$TimeLocaL_GMT_Diff = sprintf("-%02s", $TimeLocaL_GMT_Diff) ."00";
 		}
 
-		if ($cmd =~ /^loadEPG/) {
-			%HTML = ();           # reset hash for HTML
-			my $start = "";       # TV time start
-			my $end = "";         # TV time end
-			my $ch_found = 0;     # counter to verification ch
-			my $data_found = 0;   # counter to verification data
-			my $ch_name = "";     # TV channel name
-			my $title = "";       # TV title
-			my $subtitle = "";    # TV subtitle
-			my $desc = "";        # TV desc
-			my $today_start = ""; # today time start
-			my $today_end = "";   # today time end
+		Log3 $name, 4, "$name: $cmd localtime     ".localtime(time+$off_h*60*60);
+		Log3 $name, 4, "$name: $cmd gmtime        ".gmtime(time+$off_h*60*60);
+		Log3 $name, 4, "$name: $cmd diff (GMT-LT) " . $TimeLocaL_GMT_Diff;
 
-			Log3 $name, 4, "$name: Get | $cmd from file";
+		$TimeNow =~ s/-|:|\s//g;
+		$TimeNow.= " $TimeLocaL_GMT_Diff";       # loadEPG_now   20191016150432 +0200
 
-			$TimeNow =~ s/-|:|\s//g;
-			$TimeNow.= " +0200";                                     # loadEPG_now   20191016150432 +0200
-
-			if ($cmd eq "loadEPG_Prime") {
-				if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
-					my @time = split(/-\s:/,FmtDateTime(time()));
-					$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
-					$TimeNow =~ s/-|:|\s//g;
-					$TimeNow.= " +0200";
-					substr($TimeNow, 8) = '201510 +0200';
-				} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
-					substr($TimeNow, 8) = '201510 +0200';
-				}
+		if ($cmd eq "loadEPG_Prime") {
+			if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
+				my @time = split(/-\s:/,FmtDateTime(time()));
+				$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
+				$TimeNow =~ s/-|:|\s//g;
+				$TimeNow.= " +0200";
+				substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
+			} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
+				substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
 			}
+		}
 			
-			if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
-				$today_start = substr($TimeNow,0,8)."000000 +0200";
-				$today_end = substr($TimeNow,0,8)."235959 +0200";
-			}
+		if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
+			$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
+			$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
+		}
 
-			if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
-				$cmd2 =~ s/_//g;
-				$cmd2.= '10 +0200';
-				$TimeNow = $cmd2;
-			}
+		if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
+			$cmd2 =~ s/_//g;
+			$cmd2.= "10 $TimeLocaL_GMT_Diff";
+			$TimeNow = $cmd2;
+		}
+		
+		Log3 $name, 4, "$name: $cmd | TimeNow          -> $TimeNow";
 
-			if (-e "/opt/fhem/FHEM/EPG/$DownloadFile") {
-				open (FileCheck,"</opt/fhem/FHEM/EPG/$DownloadFile");
-					while (<FileCheck>) {
-						if ($_ =~ /<programme start="(.*)" stop="(.*)" channel="(.*)"/) {   ## find start | end | channel
-							my $search = $progamm{$3}->{name};
-							if (grep /$search($|,)/, $Channels) {                             ## find in attributes channel
-								if ($cmd ne "loadEPG_today") { 
-									if ($TimeNow gt $1 && $TimeNow lt $2) {                       ## Zeitpunktsuche, normal
-										($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
-										$ch_found++;
-									}								
-								} else {                                                        ## Zeitpunktsuche, kompletter Tag
-									if ($today_end gt $1 && $today_start lt $2) {
-										($start, $end, $ch_name) = ($1, $2, $progamm{$3}->{name});
-										$ch_found++;
-									}								
+		if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
+			open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+				while (<FileCheck>) {
+					if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {   ## find start | end | channel
+						my $search = $progamm{$4}->{name};
+						if (grep /$search($|,)/, $Channels) {                                    ## find in attributes channel
+							($start, $hour_diff_read, $end, $ch_name) = ($1, $2, $3, $progamm{$4}->{name});
+							if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
+								#Log3 $name, 4, "$name: $cmd | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
+								my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
+								#Log3 $name, 4, "$name: $cmd | hour_diff_result $hour_diff";
+
+								my @start_new = split("",$start);
+								my @end_new = split("",$end);
+								#Log3 $name, 4, "$name: $cmd | ".'sec | min | hour | mday | month | year';
+								#Log3 $name, 4, "$name: $cmd | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
+								#Log3 $name, 4, "$name: $cmd | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
+								#Log3 $name, 4, "$name: $cmd | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
+								#Log3 $name, 4, "$name: $cmd | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
+								#Log3 $name, 4, "$name: $cmd | start            -> $start";             # 20191023211500 +0000
+								#Log3 $name, 4, "$name: $cmd | end              -> $end";               # 20191023223000 +0000
+
+								if (index($hour_diff,"-")) {
+									$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+									$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+								} else {
+									$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+									$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
 								}
+
+								#Log3 $name, 4, "$name: $cmd | UTC start new    -> $start";
+								#Log3 $name, 4, "$name: $cmd | UTC end new      -> $end";
+
+								$start = FmtDateTime($start);
+								$end = FmtDateTime($end);
+								$start =~ s/-|:|\s//g;
+								$end =~ s/-|:|\s//g;
+								$start.= " $TimeLocaL_GMT_Diff";
+								$end.= " $TimeLocaL_GMT_Diff";
+
+								#Log3 $name, 4, "$name: $cmd | start new        -> $start";
+								#Log3 $name, 4, "$name: $cmd | end new          -> $end";
+							}
+
+							if ($cmd ne "loadEPG_today") {
+								$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);             ## Zeitpunktsuche, normal
+							} else {
+								$ch_found++ if ($today_end gt $start && $today_start lt $end);       ## Zeitpunktsuche, kompletter Tag
 							}
 						}
-						$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             ## find title
-						$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  ## find subtitle
-						$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                ## find desc
-
-						if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
-							$data_found++;
-							$HTML{$ch_name}{$data_found}{ch_name} = $ch_name;
-							Log3 $name, 4, "$name: $cmd | ch_name  -> $ch_name";
-							$HTML{$ch_name}{$data_found}{start} = $start;
-							Log3 $name, 4, "$name: $cmd | start    -> $start";
-							$HTML{$ch_name}{$data_found}{end} = $end;
-							Log3 $name, 4, "$name: $cmd | end      -> $end";
-							$HTML{$ch_name}{$data_found}{title} = $title;
-							Log3 $name, 4, "$name: $cmd | title    -> $title";
-							$HTML{$ch_name}{$data_found}{subtitle} = $subtitle;
-							Log3 $name, 4, "$name: $cmd | subtitle -> $subtitle";
-							$HTML{$ch_name}{$data_found}{desc} = $desc;
-							Log3 $name, 4, "$name: $cmd | desc     -> $desc.\n";
-
-							$ch_found = 0;
-							$ch_name = "";
-							$title = "";
-							$subtitle = "";
-							$desc = "";
-						}
 					}
-				close FileCheck;
+					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             ## find title
+					$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  ## find subtitle
+					$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                ## find desc
 
-				$hash->{STATE_data} = "all channel information loaded" if ($data_found != 0);
-				$hash->{STATE_data} = "no channel information available!" if ($data_found == 0);
-			} else {
-				readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
-				Log3 $name, 3, "$name: $cmd | error, file $DownloadFile no found at ./opt/fhem/FHEM/EPG";
-				return "ERROR: no file found!";
-			}
-			
-			#Log3 $name, 3, "$name: ".Dumper\%HTML;
-			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %HTML  != 0);
-			return undef;
+					if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
+						$data_found++;
+						Log3 $name, 4, "$name: $cmd | ch_name          -> $ch_name";        # ZDF
+
+						$HTML{$ch_name}{$data_found}{ch_name} = $ch_name;
+						$HTML{$ch_name}{$data_found}{start} = $start;
+						$HTML{$ch_name}{$data_found}{end} = $end;
+						$HTML{$ch_name}{$data_found}{hour_diff} = $hour_diff_read;
+						Log3 $name, 4, "$name: $cmd | title            -> $title";
+						$HTML{$ch_name}{$data_found}{title} = $title;
+						Log3 $name, 4, "$name: $cmd | subtitle         -> $subtitle";
+						$HTML{$ch_name}{$data_found}{subtitle} = $subtitle;
+						Log3 $name, 4, "$name: $cmd | desc             -> $desc.\n";
+						$HTML{$ch_name}{$data_found}{desc} = $desc;
+
+						$ch_found = 0;
+						$ch_name = "";
+						$desc = "";
+						$hour_diff_read = "";
+						$subtitle = "";
+						$title = "";
+					}
+				}
+			close FileCheck;
+
+			$hash->{EPG_data} = "all channel information loaded" if ($data_found != 0);
+			$hash->{EPG_data} = "no channel information available!" if ($data_found == 0);
+		} else {
+			readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
+			Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+			return "ERROR: no file found!";
 		}
+			
+		#Log3 $name, 3, "$name: ".Dumper\%HTML;
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %HTML  != 0);
+		return undef;
 	}
 	return "Unknown argument $cmd, choose one of $getlist";
 }
@@ -318,12 +370,6 @@ sub EPG_Attr() {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
 		}
-
-		## changed attribute -> reset information ##
-		if ($attrName eq "DownloadURL" || $attrName eq "DownloadFile" || $attrName eq "Variant") {
-			@channel_available = ();
-			%progamm = ();
-		}
 	}
 }
 
@@ -335,7 +381,7 @@ sub EPG_FW_Detail($@) {
 	my $cnt = 0;
 	my $ret = "";
 	
-	Log3 $name, 4, "$name: FW_Detail is running";
+	Log3 $name, 5, "$name: FW_Detail is running";
 
 	if ($Channels) {
 		my @Channels_value = split(",", $Channels);
@@ -493,7 +539,6 @@ sub EPG_FW_Attr_Channels {
 	CommandAttr($hash,"$name Channels $Channels") if ($Channels ne "");
 
 	if ($Channels eq "") {
-		@channel_available = ();
 		%progamm = ();
 		CommandDeleteAttr($hash,"$name Channels");
 		readingsSingleUpdate($hash, "state", "no channels selected", 1);
@@ -509,7 +554,7 @@ sub EPG_PerformHttpRequest($) {
 
 	Log3 $name, 4, "$name: EPG_PerformHttpRequest is running";
 	my $http_param = { 	url        => $DownloadURL.$DownloadFile,
-											timeout    => 5,
+											timeout    => 10,
 											hash       => $hash,                                     # Muss gesetzt werden, damit die Callback funktion wieder $hash hat
 											method     => "GET",                                     # Lesen von Inhalten
 											callback   => \&EPG_ParseHttpResponse                    # Diese Funktion soll das Ergebnis dieser HTTP Anfrage bearbeiten
@@ -523,51 +568,47 @@ sub EPG_ParseHttpResponse($$$) {
 	my $hash = $http_param->{hash};
 	my $name = $hash->{NAME};
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
-	my $Variant = AttrVal($name, "Variant", undef);
 	my $HttpResponse = "";
 	my $state = "no information received";
-	my $reload = 0;
-	my $FileDate = undef;
+	my $FileAge = undef;
 
-	Log3 $name, 5, "$name: EPG_ParseHttpResponse - error: $err";
-	Log3 $name, 5, "$name: EPG_ParseHttpResponse - http code: ".$http_param->{code};
+	Log3 $name, 5, "$name: ParseHttpResponse - error: $err";
+	Log3 $name, 5, "$name: ParseHttpResponse - http code: ".$http_param->{code};
 
 	if ($err ne "") {                                                          # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 		$HttpResponse = $err;
-		Log3 $name, 3, "$name: EPG_ParseHttpResponse - error: $err";
+		Log3 $name, 3, "$name: ParseHttpResponse - error: $err";
 	} elsif ($http_param->{code} ne "200") {                                   # HTTP code
 		$HttpResponse = "DownloadFile $DownloadFile was not found on URL" if (grep /$DownloadFile\swas\snot\sfound/, $data);
 		$HttpResponse = "DownloadURL was not found" if (grep /URL\swas\snot\sfound/, $data);
-		Log3 $name, 3, "$name: EPG_ParseHttpResponse - error:\n\n$data";
+		Log3 $name, 3, "$name: ParseHttpResponse - error:\n\n$data";
 	} elsif ($http_param->{code} eq "200" && $data ne "") {                    # wenn die Abfrage erfolgreich war ($data enthält die Ergebnisdaten des HTTP Aufrufes)
    	my $filename = "FHEM/EPG/$DownloadFile";
 		open(my $file, ">", $filename);                                          # Datei schreiben
 			print $file $data;
 		close $file;
 
-		if ($Variant eq "Ryteg") {
-			if ($DownloadFile =~ /.*\.xz$/) {
-				qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                    # Datei Unpack
-				$DownloadFile = substr($DownloadFile,0,-3);                          # Dateiname nach Unpack
-			}
-		} elsif ($Variant eq "IPTV_XML") {
-			if ($DownloadFile =~ /.*\Q.xml.gz\E$/) {
-				qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                # Datei Unpack
-			}
+		local $SIG{CHLD} = 'DEFAULT';
+		if ($DownloadFile =~ /.*\.gz$/) {
+			qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                  # Datei Unpack gz
+		} elsif ($DownloadFile =~ /.*\.xz$/) {
+			qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                      # Datei Unpack xz
 		}
 
-		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);       # Datei Eigenschaften
-		$FileDate = FmtDateTime($stat_DownloadFile[9]);                          # Letzte Änderungszeit
+		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
+			@channel_available = ();
+			%progamm = ();
+			$state = "ERROR: unpack $DownloadFile";
+		} else { 
+			EPG_File_check($hash);
+			$state = "information received";
+		}
+
 		$HttpResponse = "downloaded";
-		$state = "information received";
-		$reload++;
 	}
-	
-	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($reload != 0);
 
 	readingsBeginUpdate($hash);
 	readingsBulkUpdate($hash, "HttpResponse", $HttpResponse);                  # HttpResponse Status
-	readingsBulkUpdate($hash, "DownloadFile_date", $FileDate) if ($FileDate);  # Letzte Änderungszeit
 	readingsBulkUpdate($hash, "state", $state);
 	readingsEndUpdate($hash, 1);
 
@@ -579,40 +620,50 @@ sub EPG_Notify($$) {
 	my ($hash, $dev_hash) = @_;
 	my $name = $hash->{NAME};
 	my $typ = $hash->{TYPE};
-	return "" if(IsDisabled($name));	                                         # Return without any further action if the module is disabled
-	my $devName = $dev_hash->{NAME};	                                         # Device that created the events
+	return "" if(IsDisabled($name));	                                        # Return without any further action if the module is disabled
+	my $devName = $dev_hash->{NAME};	                                        # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
-	my $FileDate = "not known";
-	my $Variant = AttrVal($name, "Variant", undef);
-	my $Variant_stat = "";
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
-		Log3 $name, 5, "$name: Notify is running and starting $name";
-
-		if($Variant) {
-			if ($DownloadFile) {
-				if ($Variant eq "Ryteg" && (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3))) {
-					$Variant_stat = "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3);
-				}
-
-				if ($Variant eq "IPTV_XML") {
-					if ($DownloadFile =~ /.*\Q.xml.gz\E$/ && (-e "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3))) {
-						$Variant_stat = "/opt/fhem/FHEM/EPG/".substr($DownloadFile,0,-3);
-					} elsif ($DownloadFile =~ /.*\Q.xml\E$/ && (-e "/opt/fhem/FHEM/EPG/".$DownloadFile)) {
-						$Variant_stat = "/opt/fhem/FHEM/EPG/".$DownloadFile;
-					}
-				}
-
-				my @stat_DownloadFile = stat($Variant_stat) if ($Variant_stat ne "");      # Datei eigenschaften
-				$FileDate = FmtDateTime($stat_DownloadFile[9]) if ($Variant_stat ne "");   # Letzte Änderungszeit
-				readingsSingleUpdate($hash, "DownloadFile_date", $FileDate, 0);
-				CommandGet($hash,"$name available_channels") if ($Variant_stat ne "");
-			}
-		}
+		Log3 $name, 5, "$name: Notify is running and starting";
+		EPG_File_check($hash) if ($DownloadFile);
 	}
 
 	return undef;
+}
+
+#####################
+sub EPG_File_check {
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+	my $DownloadFile = AttrVal($name, "DownloadFile", "no file found");
+	my $DownloadFile_found = 0;
+	my $FileAge = "unknown";
+
+	Log3 $name, 5, "$name: File_check is running";
+
+	## check files ##
+	opendir(DIR,"/opt/fhem/FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
+		while( my $directory_value = readdir DIR ){
+			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
+				$DownloadFile = $directory_value;
+				$DownloadFile_found++;
+			}
+		}
+	close DIR;
+
+	if ($DownloadFile_found != 0) {
+		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
+		$FileAge = FmtDateTime($stat_DownloadFile[9]);                      # letzte Änderungszeit
+		CommandGet($hash,"$name available_channels");
+	} else {
+		$DownloadFile = "file not found";
+	}
+
+	$hash->{EPG_file_age} = $FileAge;
+	$hash->{EPG_file_name} = $DownloadFile;
+	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 }
 
 # Eval-Rückgabewert für erfolgreiches
@@ -640,7 +691,7 @@ You have to choose a source and only then can the data of the TV Guide be displa
 The specifications for the attribute Variant | DownloadFile and DownloadURL are mandatory.
 <br><br>
 <ul><u>Currently the following services are supported:</u>
-	<li>Rytec (Rytec EPG Downloader - slightly different in Germany)<br><br>
+	<li>Rytec (Rytec EPG Downloader)<br><br>
 			well-known sources:<br>
 			<ul>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
@@ -651,7 +702,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 				<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.xmltvepg.nl/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.xmltvepg.nl/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
-				<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li><a href="http://rytecepg.epgspot.com/epg_data/" target=”_blank”>http://rytecepg.epgspot.com/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
+				<li><a href="https://rytec.ricx.nl/epg_data/" target=”_blank”>https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
 			</ul><br>
 	</li>
 	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
@@ -704,7 +756,7 @@ Sie m&uuml;ssen sich f&uuml;r eine Quelle entscheiden und erst danach k&ouml;nne
 Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind zwingend notwendig.
 <br><br>
 <ul><u>Derzeit werden folgende Dienste unterst&uuml;tzt:</u>
-	<li>Rytec (Rytec EPG Downloader - gering abweichend in Deutschland)<br><br>
+	<li>Rytec (Rytec EPG Downloader)<br><br>
 			bekannte Quellen:<br>
 			<ul>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
@@ -716,7 +768,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 				<li>http://www.xmltvepg.nl/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.xmltvepg.nl/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.xmltvepg.nl/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
-				<li><a href="https://rytec.ricx.nl/epg_data/">https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003;)</small></li>
+				<li><a href="http://rytecepg.epgspot.com/epg_data/" target=”_blank”>http://rytecepg.epgspot.com/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
+				<li><a href="https://rytec.ricx.nl/epg_data/" target=”_blank”>https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
 			</ul><br>
 	</li>
 	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
@@ -753,6 +806,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
 	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul>
+
 =end html_DE
 
 # Ende der Commandref
