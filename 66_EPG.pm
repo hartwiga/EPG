@@ -111,7 +111,7 @@ sub EPG_Get($$$@) {
 	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
-	my $EPG_file_name = InternalVal($name, "EPG_file_name", undef);
+	my $EPG_file_name = InternalVal($name, "EPG_file_name", "");
 	my $Variant = AttrVal($name, "Variant", undef);
 	my $TimeNow = FmtDateTime(time());
 	
@@ -158,7 +158,7 @@ sub EPG_Get($$$@) {
 
 	if ($cmd eq "available_channels") {
 		Log3 $name, 4, "$name: Get | $cmd read file $EPG_file_name";
-		return "ERROR: no EPG_file_name" if !($EPG_file_name);
+		return "ERROR: no EPG_file_name" if ($EPG_file_name eq "");
 
 		@channel_available = ();
 		%progamm = ();
@@ -371,6 +371,8 @@ sub EPG_Get($$$@) {
 			return "ERROR: no file found!";
 		}
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %{$HTML});
+		
+		readingsSingleUpdate($hash, "state", $cmd . " accomplished", 1);
 		return undef;
 	}
 	return "Unknown argument $cmd, choose one of $getlist";
@@ -560,14 +562,14 @@ sub EPG_FW_Channels {
 	Log3 $name, 4, "$name: FW_Channels is running";
 
 	$ret.= "<table>";
-	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>no.</td><td>active</td><td>TV station name</td><td>FAV sort</td></tr>";
+	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>no.</td><td>active</td><td>TV station name</td><td>FAV</td></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
 		$style_background = "background-color:#F0F0D8;" if ($i % 2 == 0);
 		$style_background = "" if ($i % 2 != 0);
 		$checked = "checked" if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0);
 		$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish} if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999);
-		$ret.= "<tr style=\"$style_background\"><td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"4\" size=\"4\"> </td></tr>";
+		$ret.= "<tr style=\"$style_background\"><td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
 		$checked = "";
 		$Ch_sort = "";
 	}
@@ -677,6 +679,7 @@ sub EPG_ParseHttpResponse($$$) {
 			$state = "ERROR: unpack $DownloadFile";
 		} else { 
 			EPG_File_check($hash);
+			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 			$state = "information received";
 		}
 
@@ -699,11 +702,14 @@ sub EPG_Notify($$) {
 	return "" if(IsDisabled($name));	                                        # Return without any further action if the module is disabled
 	my $devName = $dev_hash->{NAME};	                                        # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
-		EPG_File_check($hash) if ($DownloadFile);
+
+		EPG_File_check($hash) if($DownloadFile);
+		CommandGet($hash,"$name loadEPG_now") if($DownloadFile && $Ch_select);
 	}
 
 	return undef;
@@ -723,6 +729,7 @@ sub EPG_File_check {
 	opendir(DIR,"/opt/fhem/FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
 		while( my $directory_value = readdir DIR ){
 			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
+				Log3 $name, 4, "$name: File_check found $directory_value";
 				$DownloadFile = $directory_value;
 				$DownloadFile_found++;
 			}
@@ -730,16 +737,18 @@ sub EPG_File_check {
 	close DIR;
 
 	if ($DownloadFile_found != 0) {
+		Log3 $name, 4, "$name: File_check ready to search channel";	
 		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
 		$FileAge = FmtDateTime($stat_DownloadFile[9]);                      # letzte Änderungszeit
-		CommandGet($hash,"$name available_channels");
 	} else {
+		Log3 $name, 4, "$name: File_check nothing found";
 		$DownloadFile = "file not found";
 	}
 
 	$hash->{EPG_file_age} = $FileAge;
 	$hash->{EPG_file_name} = $DownloadFile;
-	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+
+	CommandGet($hash,"$name available_channels") if($DownloadFile_found != 0);
 }
 
 # Eval-Rückgabewert für erfolgreiches
