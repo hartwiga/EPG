@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-10-26 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-10-29 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -26,7 +26,7 @@ eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpanm XML::Simple)
 
 my @channel_available;
 my %progamm;
-my %HTML;
+my $HTML = {};
 
 #####################
 sub EPG_Initialize($) {
@@ -40,7 +40,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se Channels";
+	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se Ch_select Ch_sort";
 												             #$readingFnAttributes;
 }
 
@@ -107,7 +107,8 @@ sub EPG_Get($$$@) {
 	my ( $hash, $name, $cmd, @a ) = @_;
 	my $cmd2 = $a[0];
 	my $getlist = "loadFile:noArg ";
-	my $Channels = AttrVal($name, "Channels", undef);
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $EPG_file_name = InternalVal($name, "EPG_file_name", undef);
@@ -118,7 +119,7 @@ sub EPG_Get($$$@) {
 		$getlist.= "available_channels:noArg " if (InternalVal($name, "EPG_file_age", undef) && InternalVal($name, "EPG_file_age", undef) ne "unknown or no file found");
 	}
 
-	if (AttrVal($name, "Channels", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Channels", undef) ne "" && AttrVal($name, "Variant", undef)) {
+	if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "" && AttrVal($name, "Variant", undef)) {
 		$getlist.= "loadEPG_now:noArg ";               # now
 		$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 		$getlist.= "loadEPG_today:noArg ";             # today all
@@ -185,6 +186,8 @@ sub EPG_Get($$$@) {
 
 			@channel_available = sort @channel_available;
 			$state = "available channels loaded";
+			$hash->{EPG_data} = "ready to read";
+
 			CommandAttr($hash,"$name Variant $hash->{EPG_file_format}") if ($hash->{EPG_file_format});		# setzt Variante von EPG_File
 			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 			readingsSingleUpdate($hash, "state", $state, 1);
@@ -197,12 +200,14 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd =~ /^loadEPG/) {
-		%HTML = ();                # reset hash for HTML
+		$HTML = {};                # reset hash for HTML
 		my $start = "";            # TV time start
 		my $end = "";              # TV time end
 		my $ch_found = 0;          # counter to verification ch
-		my $data_found = 0;        # counter to verification data
-		my $ch_name = "";          # TV channel name
+		my $data_found;            # counter to verification data
+		my $ch_name = "";          # TV channel display-name
+		my $ch_name_old = "";      # TV channel display-name before
+		my $ch_id = "";            # TV channel channel id
 		my $title = "";            # TV title
 		my $subtitle = "";         # TV subtitle
 		my $desc = "";             # TV desc
@@ -229,7 +234,7 @@ sub EPG_Get($$$@) {
 		Log3 $name, 4, "$name: $cmd diff (GMT-LT) " . $TimeLocaL_GMT_Diff;
 
 		$TimeNow =~ s/-|:|\s//g;
-		$TimeNow.= " $TimeLocaL_GMT_Diff";       # loadEPG_now   20191016150432 +0200
+		$TimeNow.= " $TimeLocaL_GMT_Diff";                       # loadEPG_now   20191016150432 +0200
 
 		if ($cmd eq "loadEPG_Prime") {
 			if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
@@ -242,7 +247,7 @@ sub EPG_Get($$$@) {
 				substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
 			}
 		}
-			
+
 		if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
 			$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
 			$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
@@ -253,16 +258,16 @@ sub EPG_Get($$$@) {
 			$cmd2.= "10 $TimeLocaL_GMT_Diff";
 			$TimeNow = $cmd2;
 		}
-		
+
 		Log3 $name, 4, "$name: $cmd | TimeNow          -> $TimeNow";
 
 		if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
 			open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
 				while (<FileCheck>) {
-					if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {   ## find start | end | channel
+					if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
 						my $search = $progamm{$4}->{name};
-						if (grep /$search($|,)/, $Channels) {                                    ## find in attributes channel
-							($start, $hour_diff_read, $end, $ch_name) = ($1, $2, $3, $progamm{$4}->{name});
+						if (grep /$search($|,)/, $Ch_select) {                                       # find in attributes channel
+							($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $progamm{$4}->{name});
 							if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
 								#Log3 $name, 4, "$name: $cmd | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
 								my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
@@ -301,32 +306,54 @@ sub EPG_Get($$$@) {
 							}
 
 							if ($cmd ne "loadEPG_today") {
-								$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);             ## Zeitpunktsuche, normal
+								$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
 							} else {
-								$ch_found++ if ($today_end gt $start && $today_start lt $end);       ## Zeitpunktsuche, kompletter Tag
+								$ch_found++ if ($today_end gt $start && $today_start lt $end);                     # Zeitpunktsuche, kompletter Tag
 							}
 						}
 					}
-					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             ## find title
-					$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  ## find subtitle
-					$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                ## find desc
+					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             # title
+					$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  # subtitle
+					$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                # desc
 
 					if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
+						$data_found = -1 if ($ch_name_old ne $ch_name);                                        # Reset bei Kanalwechsel
 						$data_found++;
-						Log3 $name, 4, "$name: $cmd | ch_name          -> $ch_name";        # ZDF
-
-						$HTML{$ch_name}{$data_found}{ch_name} = $ch_name;
-						$HTML{$ch_name}{$data_found}{start} = $start;
-						$HTML{$ch_name}{$data_found}{end} = $end;
-						$HTML{$ch_name}{$data_found}{hour_diff} = $hour_diff_read;
+						Log3 $name, 4, "$name: $cmd | ch_name          -> $ch_name";
+						Log3 $name, 4, "$name: $cmd | ch_name_old      -> $ch_name_old";
+						Log3 $name, 4, "$name: $cmd | EPG information  -> $data_found";
 						Log3 $name, 4, "$name: $cmd | title            -> $title";
-						$HTML{$ch_name}{$data_found}{title} = $title;
 						Log3 $name, 4, "$name: $cmd | subtitle         -> $subtitle";
-						$HTML{$ch_name}{$data_found}{subtitle} = $subtitle;
 						Log3 $name, 4, "$name: $cmd | desc             -> $desc.\n";
-						$HTML{$ch_name}{$data_found}{desc} = $desc;
+
+						$HTML->{$ch_name}{ch_name} = $ch_name;
+						$HTML->{$ch_name}{ch_id} = $ch_id;
+
+						if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
+							my @Ch_select_array = split(",",$Ch_select);
+							my @Ch_sort_array = split(",",$Ch_sort);
+
+							foreach my $i (0 .. $#Ch_select_array) {
+								if ($Ch_select_array[$i] eq $ch_name) {
+									my $value_new = 999;
+									$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
+									$HTML->{$Ch_select_array[$i]}{ch_wish} = $value_new;
+									Log3 $name, 4, "$name: $cmd old numbre of ".$Ch_select_array[$i]." set to ".$value_new;
+								}
+							}
+						} else {
+							$HTML->{$ch_name}{ch_wish} = 999;						
+						}
+
+						$HTML->{$ch_name}{EPG}[$data_found]{start} = $start;
+						$HTML->{$ch_name}{EPG}[$data_found]{end} = $end;
+						$HTML->{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
+						$HTML->{$ch_name}{EPG}[$data_found]{title} = $title;
+						$HTML->{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
+						$HTML->{$ch_name}{EPG}[$data_found]{desc} = $desc;
 
 						$ch_found = 0;
+						$ch_name_old = $ch_name;
 						$ch_name = "";
 						$desc = "";
 						$hour_diff_read = "";
@@ -336,16 +363,14 @@ sub EPG_Get($$$@) {
 				}
 			close FileCheck;
 
-			$hash->{EPG_data} = "all channel information loaded" if ($data_found != 0);
-			$hash->{EPG_data} = "no channel information available!" if ($data_found == 0);
+			$hash->{EPG_data} = "all channel information loaded" if ($data_found != -1);
+			$hash->{EPG_data} = "no channel information available!" if ($data_found == -1);
 		} else {
 			readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
 			Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
 			return "ERROR: no file found!";
 		}
-			
-		#Log3 $name, 3, "$name: ".Dumper\%HTML;
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %HTML  != 0);
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %{$HTML});
 		return undef;
 	}
 	return "Unknown argument $cmd, choose one of $getlist";
@@ -377,14 +402,14 @@ sub EPG_Attr() {
 sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
-	my $Channels = AttrVal($name, "Channels", undef);
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $cnt = 0;
 	my $ret = "";
-	
-	Log3 $name, 5, "$name: FW_Detail is running";
 
-	if ($Channels) {
-		my @Channels_value = split(",", $Channels);
+	Log3 $name, 4, "$name: FW_Detail is running";
+
+	if ($Ch_select) {
+		my @Channels_value = split(",", $Ch_select);
 		$cnt = scalar(@Channels_value);
 	}
 
@@ -428,11 +453,25 @@ sub EPG_FW_Detail($@) {
 							$("#EPG_ListWindow table td input:checkbox").prop(\'checked\', false);
 						}},
 						{text:"save", click:function(){
-							var allVals = [];
+							var Channel = [];
+							var Channel_id = [];
+							var desired_channel = [];
 							$("#EPG_ListWindow input:checkbox:checked").each(function() {
-							allVals.push($(this).attr(\'name\'));
+								Channel.push($(this).attr(\'name\'));
+								Channel_id.push($(this).attr(\'id\'));
 							})
-							FW_cmd(FW_root+ \'?XHR=1"'.$FW_CSRF.'"&cmd={EPG_FW_Attr_Channels("'.$name.'","\'+allVals+\'")}\');
+							$("#EPG_ListWindow td input:text").each(function() {
+								var n = Channel_id.indexOf($(this).attr(\'id\'));
+								if (n != -1) {
+									var m = $(this).val();
+									if (!m) {
+										m = 0;
+									}
+									/* desired_channel.push($(this).val()); */
+									desired_channel.push(m);
+								}
+							})
+							FW_cmd(FW_root+ \'?XHR=1"'.$FW_CSRF.'"&cmd={EPG_FW_Attr_Channels("'.$name.'","\'+Channel+\'","\'+desired_channel+\'")}\');
 
 							$(this).dialog("close");
 							$(div).remove();
@@ -459,9 +498,9 @@ sub EPG_FW_Detail($@) {
 
 		### HTML ###
 		
-		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if (scalar keys %HTML  == 0);
-		if (scalar keys %HTML != 0) {
-			my $ch_name = "";
+		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (scalar keys %{$HTML});
+
+		if (scalar keys %{$HTML}) {
 			my $start = "";
 			my $end = "";
 			my $title = "";
@@ -472,30 +511,36 @@ sub EPG_FW_Detail($@) {
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
 			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th></tr>";
 	
-			foreach my $ch (sort keys %HTML) {
-				foreach my $value (sort {$a <=> $b} keys %{$HTML{$ch}}) {
-					foreach my $d (keys %{$HTML{$ch}{$value}}) {
-						$ch_name = $HTML{$ch}{$value}{$d} if ($d eq "ch_name");
-						$start = substr($HTML{$ch}{$value}{$d},8,2).":".substr($HTML{$ch}{$value}{$d},10,2) if ($d eq "start");
-						$end = substr($HTML{$ch}{$value}{$d},8,2).":".substr($HTML{$ch}{$value}{$d},10,2) if ($d eq "end");
-						$title = $HTML{$ch}{$value}{$d} if ($d eq "title");
-						$desc = $HTML{$ch}{$value}{$d} if ($d eq "desc");					
+			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
+
+			#foreach my $ch (sort keys %{$HTML}) {
+			foreach my $ch (@positioned) {
+				## Kanäle ##
+				#Log3 $name, 3, "$name: ch                -> $ch (".$HTML->{$ch}{ch_wish}.")";
+				foreach my $value (@{$HTML->{$ch}{EPG}}) {
+					## EPG ##
+					#Log3 $name, 3, "$name: value             -> $value";
+					foreach my $d (keys %{$value}) {
+						## einzelne Werte ##
+						#Log3 $name, 3, "$name: description       -> $d";
+						#Log3 $name, 3, "$name: description value -> $value->{$d}";
+						$start = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "start");
+						$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "end");
+						$title = $value->{$d} if ($d eq "title");
+						$desc = $value->{$d} if ($d eq "desc");					
 					}
 					$cnt_infos++;
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
 					if ($desc ne "") {
-						#Log3 $name, 3, "$name: $desc";
 						$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
 						$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
-						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
 					} else {
-						$ret .= "<td>$ch_name</td><td>$start</td><td>$end</td><td>$title</td></tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td></tr>";
 					}
-					
 				}
-			}			
-
+			}
 			$ret .= "</table></div>";
 		}
 	}
@@ -507,21 +552,24 @@ sub EPG_FW_Detail($@) {
 sub EPG_FW_Channels {
 	my $name = shift;
 	my $ret = "";
-	my $Channels = AttrVal($name, "Channels", undef);
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $Ch_sort = "";
 	my $checked = "";
 	my $style_background = "";
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
 	$ret.= "<table>";
-	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>no.</td><td>active</td><td>TV station name</td></tr>";
+	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>no.</td><td>active</td><td>TV station name</td><td>FAV sort</td></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
 		$style_background = "background-color:#F0F0D8;" if ($i % 2 == 0);
 		$style_background = "" if ($i % 2 != 0);
-		$checked = "checked" if ($Channels && index($Channels,$channel_available[$i]) >= 0);
-		$ret.= "<tr style=\"$style_background\"><td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td></tr>";
+		$checked = "checked" if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0);
+		$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish} if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999);
+		$ret.= "<tr style=\"$style_background\"><td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"4\" size=\"4\"> </td></tr>";
 		$checked = "";
+		$Ch_sort = "";
 	}
 	
 	$ret.= "</table>";
@@ -533,15 +581,43 @@ sub EPG_FW_Channels {
 sub EPG_FW_Attr_Channels {
 	my $name = shift;
 	my $hash = $defs{$name};
-	my $Channels = shift;
+	my $Ch_select = shift;
+	my @Ch_select_array = split(",",$Ch_select);
+	my $Ch_sort = shift;
+	my @Ch_sort_array = split(",",$Ch_sort);
 
 	Log3 $name, 4, "$name: FW_Attr_Channels is running";
-	CommandAttr($hash,"$name Channels $Channels") if ($Channels ne "");
+	Log3 $name, 5, "$name: FW_Attr_Channels Ch_select $Ch_select";
+	Log3 $name, 5, "$name: FW_Attr_Channels Ch_sort $Ch_sort";
 
-	if ($Channels eq "") {
-		%progamm = ();
-		CommandDeleteAttr($hash,"$name Channels");
+	if ($Ch_select eq "") {
+		Log3 $name, 4, "$name: FW_Attr_Channels all Channels delete and clean view";
+		CommandDeleteAttr($hash,"$name Ch_select");
+		CommandDeleteAttr($hash,"$name Ch_sort");
 		readingsSingleUpdate($hash, "state", "no channels selected", 1);
+		$HTML = {};
+
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+	} else {
+		Log3 $name, 4, "$name: FW_Attr_Channels new Channels set";
+		$HTML = {};
+		CommandAttr($hash,"$name Ch_select $Ch_select");
+		if ($Ch_sort !~ /^[0,]+$/) {
+			CommandAttr($hash,"$name Ch_sort $Ch_sort");
+		} else {
+			CommandDeleteAttr($hash,"$name Ch_sort");		
+		}
+
+		CommandGet($hash, "$name loadEPG_now");
+
+		foreach my $i (0 .. $#Ch_select_array) {
+			if ($Ch_sort_array[$i] != 0) {
+				Log3 $name, 4, "$name: FW_Attr_Channels new numbre of ".$Ch_select_array[$i]." set to ".$Ch_sort_array[$i];
+				$HTML->{$Ch_select_array[$i]}{ch_wish} = $Ch_sort_array[$i];
+			} else {
+				$HTML->{$Ch_select_array[$i]}{ch_wish} = 999;                          # Reset Default
+			}
+		}
 	}
 }
 
@@ -731,7 +807,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 
 <b>Attribute</b><br>
 	<ul><li><a href="#disable">disable</a></li></ul><br>
-	<ul><li><a name="Channels">Channels</a><br>
+	<ul><li><a name="Ch_select">Ch_select</a><br>
 	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired channels.<br>
 	<i>Normally you do not have to edit this attribute manually.</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
@@ -797,7 +873,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 
 <b>Attribute</b><br>
 	<ul><li><a href="#disable">disable</a></li></ul><br>
-	<ul><li><a name="Channels">Channels</a><br>
+	<ul><li><a name="Ch_select">Ch_select</a><br>
 	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschten Kan&auml;le definierte.<br>
 	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten.</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
