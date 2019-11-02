@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-10-29 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-02 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -40,7 +40,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"disable DownloadURL DownloadFile Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se Ch_select Ch_sort";
+	$hash->{AttrList}              =	"Ch_select Ch_sort DownloadFile DownloadURL Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se View_Subtitle:no,yes disable";
 												             #$readingFnAttributes;
 }
 
@@ -405,6 +405,7 @@ sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $View_Subtitle = "";
 	my $cnt = 0;
 	my $ret = "";
 
@@ -510,8 +511,9 @@ sub EPG_FW_Detail($@) {
 			my $desc = "";
 			my $cnt_infos = 0;
 
+			$View_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
-			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th></tr>";
+			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$View_Subtitle</tr>";
 	
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
@@ -529,17 +531,20 @@ sub EPG_FW_Detail($@) {
 						$start = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "start");
 						$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "end");
 						$title = $value->{$d} if ($d eq "title");
-						$desc = $value->{$d} if ($d eq "desc");					
+						$desc = $value->{$d} if ($d eq "desc");
+						$subtitle = $value->{$d} if ($d eq "subtitle");
 					}
 					$cnt_infos++;
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
+					$View_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
+
 					if ($desc ne "") {
 						$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
 						$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td></tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
 					} else {
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td></tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$View_Subtitle</tr>";
 					}
 				}
 			}
