@@ -540,8 +540,14 @@ sub EPG_FW_Detail($@) {
 					$View_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
 
 					if ($desc ne "") {
-						$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
-						$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
+						#$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
+						#$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
+
+						$desc =~ s/<br>/\n/g;
+						$desc =~ s/(.{1,65}|\S{66,})(?:\s[^\S\r\n]*|\Z)/$1<br>/g; 
+						$desc =~ s/[\r\'\"]/ /g;
+						$desc =~ s/[\n]|\\n/<br>/g;
+
 						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
 					} else {
 						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$View_Subtitle</tr>";
@@ -824,12 +830,18 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul><li><a name="Ch_select">Ch_select</a><br>
 	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired channels.<br>
 	<i>Normally you do not have to edit this attribute manually.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_sort">Ch_sort</a><br>
+	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired new channelnumbre.<br>
+	<i>Normally you do not have to edit this attribute manually. Once you clear this attribute, there is no manual sort!</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
-	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul>
+	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul><br>
+	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
+	Displays additional information of the shipment as far as available.</li><a name=" "></a></ul>
+
 =end html
 
 
@@ -890,12 +902,17 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul><li><a name="Ch_select">Ch_select</a><br>
 	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschten Kan&auml;le definierte.<br>
 	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_sort">Ch_sort</a><br>
+	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschte neue Kanalnummer definierte.<br>
+	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten. Sobald man dieses Attribut l&ouml;scht, ist keine manuelle Sortierung vorhanden!</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
-	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul>
+	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul><br>
+	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
+	Zeigt Zusatzinformation der Sendung an soweit verf&uuml;gbar.</li><a name=" "></a></ul>
 
 =end html_DE
 
