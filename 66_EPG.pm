@@ -13,6 +13,10 @@
 # *.xml.gz  -> mit Dateiendung xml nach unpack
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
+# Note´s
+# - check teXXas_RSS and 20:15
+# - Use of uninitialized value in numeric comparison (<=>) at ./FHEM/66_EPG.pm line 668 (sort) MDR MDR SA MDR TH
+#################################################################
 
 package main;
 
@@ -57,7 +61,7 @@ sub EPG_Define($$) {
 	my ($cmd, $ret);
 
 	return "Usage: define <name> $name"  if(@arg != 2);
-	
+
 	if ($init_done) {
 		if (!defined(AttrVal($autocreateName, "disable", undef)) && !exists($defs{$filelogName})) {
 			### create FileLog ###
@@ -79,7 +83,7 @@ sub EPG_Define($$) {
 		### Attributes ###
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
-	
+
 	### default value´s ###
 	readingsBeginUpdate($hash);
 	readingsBulkUpdate($hash, "state" , "Defined");
@@ -171,7 +175,7 @@ sub EPG_Get($$$@) {
 							Log3 $name, 5, "$name: Get | $cmd id: $ch_id -> display_name: ".$1;
 							$progamm{$ch_id}{name} = $1;
 							push(@channel_available,$1);
-						}					
+						}
 					} elsif ($Variant eq "teXXas_RSS") {
 						$cnt++;
 						$hash->{EPG_data_time} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
@@ -184,7 +188,7 @@ sub EPG_Get($$$@) {
 					}
 				}
 			close FileCheck;
-			
+
 			if ($cnt == 0) {
 				readingsSingleUpdate($hash, "state", "unknown methode! need development!", 1);
 				return "";
@@ -226,7 +230,7 @@ sub EPG_Get($$$@) {
 				$getlist.= "loadEPG:".$loadEPG_list." " ;
 			}
 		}
-		
+
 		if ($cmd =~ /^loadEPG/) {
 			$HTML = {};                # reset hash for HTML
 			my $start = "";            # TV time start
@@ -398,7 +402,7 @@ sub EPG_Get($$$@) {
 			}
 		}
 	}
-	
+
 	if ($Variant eq "teXXas_RSS" ) {
 		$getlist.= "loadEPG_now:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "now");
 		$getlist.= "loadEPG_Prime:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "20:15");
@@ -435,7 +439,7 @@ sub EPG_Get($$$@) {
 						if ( ($Ch_select) && (grep /$search($|,)/, $Ch_select) ) {
 							Log3 $name, 5, "$name: $cmd |             -> $1 found";
 							$ch_name = $1;
-							$ch_found++;						
+							$ch_found++;
 						} else {
 							Log3 $name, 5, "$name: $cmd |             -> not $1 found";
 						}
@@ -460,7 +464,7 @@ sub EPG_Get($$$@) {
 							$HTML->{$ch_name}{ch_wish} = 999;
 						}
 						### need check attribut
-						$HTML->{$ch_name}{ch_name} = $ch_name;						
+						$HTML->{$ch_name}{ch_name} = $ch_name;
 					}
 
 					if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?(.*)]]/ && $ch_found != 0) {
@@ -470,7 +474,7 @@ sub EPG_Get($$$@) {
 						$start = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($4,0,2).substr($4,3,2) . "";
 						Log3 $name, 4, "$name: $cmd | start mod   -> ".$start;
 						Log3 $name, 4, "$name: $cmd | end         -> ".$5;
-						$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";						
+						$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";
 						Log3 $name, 4, "$name: $cmd | end mod     -> ".$end;
 						$desc = $7;
 						Log3 $name, 4, "$name: $cmd | description -> ".$7;
@@ -522,14 +526,14 @@ sub EPG_Attr() {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
 		}
-		
+
 		if($attrName eq "Variant") {
 			if ($Variant && ($attrValue ne $Variant) || not $Variant) {
 				delete $hash->{EPG_data} if ($hash->{EPG_data});
 				delete $hash->{EPG_file_age} if ($hash->{EPG_file_age});
 				delete $hash->{EPG_file_format} if ($hash->{EPG_file_format});
 				delete $hash->{EPG_file_name} if ($hash->{EPG_file_name});
-				
+
 				@channel_available = ();
 				%progamm = ();
 				$HTML = {};
@@ -587,7 +591,7 @@ sub EPG_FW_Detail($@) {
 				var oldPos = $("body").scrollTop();
 
 				$(div).dialog({
-					dialogClass:"no-close", modal:true, width:"auto", closeOnEscape:true, 
+					dialogClass:"no-close", modal:true, width:"auto", closeOnEscape:true,
 					maxHeight:$(window).height()*0.95,
 					title: "'.$name.' Channel Overview",
 					buttons: [
@@ -731,7 +735,7 @@ sub EPG_FW_Channels {
 		$checked = "";
 		$Ch_sort = "";
 	}
-	
+
 	$ret.= "</table>";
 
 	return $ret;
