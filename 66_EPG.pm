@@ -195,7 +195,8 @@ sub EPG_Get($$$@) {
 			}
 
 			@channel_available = sort @channel_available;
-			#Log3 $name, 3, Dumper\@channel_available;
+			#Log3 $name, 3, "$name: $cmd ".Dumper\@channel_available;
+
 			$state = "available channels loaded";
 			$hash->{EPG_data} = "ready to read";
 
@@ -298,7 +299,9 @@ sub EPG_Get($$$@) {
 					while (<FileCheck>) {
 						if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
 							my $search = $progamm{$4}->{name};
-							if (grep /$search($|,)/, $Ch_select) {                                       # find in attributes channel
+							return if not ($Ch_select);
+
+							if (grep /$search($|,)/, $Ch_select) {                                      # find in attributes channel
 								($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $progamm{$4}->{name});
 								if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
 									#Log3 $name, 4, "$name: $cmd | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
@@ -404,15 +407,14 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($Variant eq "teXXas_RSS" ) {
-		$getlist.= "loadEPG_now:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "now");
-		$getlist.= "loadEPG_Prime:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "20:15");
+		$getlist.= "loadEPG_now:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "now" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
+		$getlist.= "loadEPG_Prime:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "20:15" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
 
-		if ($cmd ne "?") {
+		if ($cmd =~ /^loadEPG/) {
 			if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
 				open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
 					my $string = "";
 					while (<FileCheck>) {
-						#chomp($_);
 						$string .= $_;
 					}
 				close FileCheck;
@@ -437,11 +439,12 @@ sub EPG_Get($$$@) {
 						}
 
 						if ( ($Ch_select) && (grep /$search($|,)/, $Ch_select) ) {
-							Log3 $name, 5, "$name: $cmd |             -> $1 found";
+							#Log3 $name, 3, "$name: $cmd $_";
+							Log3 $name, 4, "$name: $cmd |             -> $1 found";
 							$ch_name = $1;
 							$ch_found++;
 						} else {
-							Log3 $name, 5, "$name: $cmd |             -> not $1 found";
+							Log3 $name, 4, "$name: $cmd |             -> not $1 found";
 						}
 					}
 
@@ -467,7 +470,7 @@ sub EPG_Get($$$@) {
 						$HTML->{$ch_name}{ch_name} = $ch_name;
 					}
 
-					if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?(.*)]]/ && $ch_found != 0) {
+					if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?((.*)((\n.*)?)+)]]/ && $ch_found != 0) {
 						Log3 $name, 4, "$name: $cmd | time        -> ".$2;    # 02.11.2019 13:35 - 14:30
 						$time = $2;
 						Log3 $name, 4, "$name: $cmd | start       -> ".$4;
@@ -486,7 +489,7 @@ sub EPG_Get($$$@) {
 					}
 				}
 
-				#Log3 $name, 4, Dumper\%{$HTML};
+				#Log3 $name, 4, "$name: $cmd ".Dumper\%{$HTML};
 
 			} else {
 				readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
@@ -664,7 +667,7 @@ sub EPG_FW_Detail($@) {
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
 			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$View_Subtitle</tr>";
 
-			#Log3 $name, 3, Dumper\%{$HTML};	
+			#Log3 $name, 3, "$name: FW_Detail ".Dumper\%{$HTML};
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
 			#foreach my $ch (sort keys %{$HTML}) {
@@ -779,8 +782,10 @@ sub EPG_FW_Attr_Channels {
 			if ($Ch_sort_array[$i] != 0) {
 				Log3 $name, 4, "$name: FW_Attr_Channels new numbre of ".$Ch_select_array[$i]." set to ".$Ch_sort_array[$i];
 				$HTML->{$Ch_select_array[$i]}{ch_wish} = $Ch_sort_array[$i];
+				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			} else {
 				$HTML->{$Ch_select_array[$i]}{ch_wish} = 999;                          # Reset Default
+				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
 	}
@@ -837,11 +842,14 @@ sub EPG_ParseHttpResponse($$$) {
 		}
 
 		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
+			Log3 $name, 3, "$name: ParseHttpResponse - RESET values and STOP";
 			@channel_available = ();
 			%progamm = ();
 			$state = "ERROR: unpack $DownloadFile";
-		} else { 
+		} else {
+			Log3 $name, 4, "$name: ParseHttpResponse - EPG_File_check starting";
 			EPG_File_check($hash);
+			Log3 $name, 4, "$name: ParseHttpResponse - EPG_File_check END and reload Website";
 			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 			$state = "information received";
 		}
@@ -865,17 +873,13 @@ sub EPG_Notify($$) {
 	return "" if(IsDisabled($name));	                                        # Return without any further action if the module is disabled
 	my $devName = $dev_hash->{NAME};	                                        # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
-	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $Variant = AttrVal($name, "Variant", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
 
-		if ($Variant) {
-			EPG_File_check($hash) if($DownloadFile);
-			CommandGet($hash,"$name loadEPG_now") if($DownloadFile && $Ch_select);		
-		}
+		EPG_File_check($hash) if($Variant && $DownloadFile);
 	}
 
 	return undef;
@@ -885,6 +889,7 @@ sub EPG_Notify($$) {
 sub EPG_File_check {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", "no file found");
 	my $DownloadFile_found = 0;
 	my $FileAge = "unknown";
@@ -914,7 +919,12 @@ sub EPG_File_check {
 	$hash->{EPG_file_age} = $FileAge;
 	$hash->{EPG_file_name} = $DownloadFile;
 
-	CommandGet($hash,"$name available_channels") if($DownloadFile_found != 0);
+	if($DownloadFile_found != 0) {
+		Log3 $name, 4, "$name: File_check - Step 1 -> available_channels";
+		CommandGet($hash,"$name available_channels");
+		Log3 $name, 4, "$name: File_check - Step 2 -> loadEPG_now";
+		CommandGet($hash,"$name loadEPG_now") if($Ch_select);
+	}
 }
 
 # Eval-Rückgabewert für erfolgreiches
