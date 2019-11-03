@@ -14,8 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - check teXXas_RSS and 20:15
-# - Use of uninitialized value in numeric comparison (<=>) at ./FHEM/66_EPG.pm line 668 (sort) MDR MDR SA MDR TH
+# - other methode if download slow | nonBlocking
 #################################################################
 
 package main;
@@ -46,7 +45,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort DownloadFile DownloadURL Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
+	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Icon:textField-long DownloadFile DownloadURL HTTP_TimeOut Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
 												             #$readingFnAttributes;
 }
 
@@ -530,6 +529,11 @@ sub EPG_Attr() {
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
 		}
 
+		if ($attrName eq "HTTP_TimeOut") {
+			return "to small (standard 10)" if ($attrValue < 5);
+			return "to long (standard 10)" if ($attrValue > 60);
+		}
+
 		if($attrName eq "Variant") {
 			if ($Variant && ($attrValue ne $Variant) || not $Variant) {
 				delete $hash->{EPG_data} if ($hash->{EPG_data});
@@ -543,6 +547,14 @@ sub EPG_Attr() {
 
 				FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 				return undef;
+			}
+		}
+		
+		if ($attrName eq "Ch_Icon") {
+			my $err = perlSyntaxCheck($attrValue, ());   # check PERL Code
+			if($err) {
+				$err = "ERROR: your Input is NOT valid! \n \n".$err;
+				return $err
 			}
 		}
 	}
@@ -703,6 +715,9 @@ sub EPG_FW_Detail($@) {
 						$desc =~ s/[\n]|\\n/<br>/g;
 
 						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
+						### TEST ###
+						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
+						### TEST ###
 					} else {
 						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$View_Subtitle</tr>";
 					}
@@ -797,10 +812,11 @@ sub EPG_PerformHttpRequest($) {
 	my $name = $hash->{NAME};
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
+	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
 
 	Log3 $name, 4, "$name: EPG_PerformHttpRequest is running";
 	my $http_param = { 	url        => $DownloadURL.$DownloadFile,
-											timeout    => 10,
+											timeout    => $HTTP_TimeOut,
 											hash       => $hash,                                     # Muss gesetzt werden, damit die Callback funktion wieder $hash hat
 											method     => "GET",                                     # Lesen von Inhalten
 											callback   => \&EPG_ParseHttpResponse                    # Diese Funktion soll das Ergebnis dieser HTTP Anfrage bearbeiten
@@ -815,6 +831,7 @@ sub EPG_ParseHttpResponse($$$) {
 	my $name = $hash->{NAME};
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $HttpResponse = "";
+	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
 	my $state = "no information received";
 	my $FileAge = undef;
 
@@ -824,6 +841,7 @@ sub EPG_ParseHttpResponse($$$) {
 	if ($err ne "") {                                                          # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 		$HttpResponse = $err;
 		Log3 $name, 3, "$name: ParseHttpResponse - error: $err";
+		$state = "downloading not finish in the maximum time from $HTTP_TimeOut seconds (slow)" if (grep /timed out/, $err);
 	} elsif ($http_param->{code} ne "200") {                                   # HTTP code
 		$HttpResponse = "DownloadFile $DownloadFile was not found on URL" if (grep /$DownloadFile\swas\snot\sfound/, $data);
 		$HttpResponse = "DownloadURL was not found" if (grep /URL\swas\snot\sfound/, $data);
@@ -958,6 +976,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz <small>&nbsp;&nbsp;(x)</small></li>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://epg.energyiptv.com/epg/epg.xml.gz <small>&nbsp;&nbsp;(&#10003; slowly due to dataset)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
@@ -1003,6 +1022,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
+	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
+	Maximum time for the download. (default 10 | maximum 59)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
 	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul><br>
 	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
@@ -1030,6 +1051,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Basic.xz <small>&nbsp;&nbsp;(x)</small></li>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_Common.xz <small>&nbsp;&nbsp;(x)</small></li>
 				<li>http://91.121.106.172/~rytecepg/epg_data/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(x)</small></li>
+				<li>http://epg.energyiptv.com/epg/epg.xml.gz <small>&nbsp;&nbsp;(&#10003; langsam aufgrund Datenmenge)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_Basic.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_Common.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
 				<li>http://www.vuplus-community.net/rytec/rytecDE_SportMovies.xz <small>&nbsp;&nbsp;(&#10003;)</small></li>
@@ -1076,6 +1098,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
+	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
+	Maximale Zeit für den Download. (Standard 10 | maximal 59)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
 	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul><br>
 	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
