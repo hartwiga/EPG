@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-02 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-03 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -18,7 +18,9 @@ package main;
 
 use strict;
 use warnings;
+
 use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
+use utf8;
 use Data::Dumper;
 
 my $missingModulEPG = "";
@@ -40,7 +42,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort DownloadFile DownloadURL Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se View_Subtitle:no,yes disable";
+	$hash->{AttrList}              =	"Ch_select Ch_sort DownloadFile DownloadURL Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
 												             #$readingFnAttributes;
 }
 
@@ -105,38 +107,21 @@ sub EPG_Set($$$@) {
 #####################
 sub EPG_Get($$$@) {
 	my ( $hash, $name, $cmd, @a ) = @_;
-	my $cmd2 = $a[0];
-	my $getlist = "loadFile:noArg ";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
-	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
+	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $EPG_file_name = InternalVal($name, "EPG_file_name", "");
-	my $Variant = AttrVal($name, "Variant", undef);
 	my $TimeNow = FmtDateTime(time());
-	
+	my $Variant = AttrVal($name, "Variant", undef);
+	my $cmd2 = $a[0];
+	my $getlist = "loadFile:noArg ";
+
+	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
+	my @Ch_sort_array = split(",",$Ch_sort) if ($Ch_sort);
+
 	if ($Variant) {
 		$getlist.= "available_channels:noArg " if (InternalVal($name, "EPG_file_age", undef) && InternalVal($name, "EPG_file_age", undef) ne "unknown or no file found");
-	}
-
-	if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "" && AttrVal($name, "Variant", undef)) {
-		$getlist.= "loadEPG_now:noArg ";               # now
-		$getlist.= "loadEPG_Prime:noArg ";             # Primetime
-		$getlist.= "loadEPG_today:noArg ";             # today all
-
-		my $TimeNowMod = $TimeNow;
-		$TimeNowMod =~ s/-|:|\s//g;
-
-		# every hour list #
-		my $loadEPG_list = "";
-		for my $d (substr($TimeNowMod,8, 2) +1 .. 23) {
-			$loadEPG_list.= substr($TimeNowMod,0, 8)."_".sprintf("%02s",$d)."00,";
-		}
-
-		if ($loadEPG_list =~ /,$/) {
-			$loadEPG_list = substr($loadEPG_list,0, -1);
-			$getlist.= "loadEPG:".$loadEPG_list." " ;
-		}
 	}
 
 	my $ch_id;
@@ -157,11 +142,13 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "available_channels") {
-		Log3 $name, 4, "$name: Get | $cmd read file $EPG_file_name";
 		return "ERROR: no EPG_file_name" if ($EPG_file_name eq "");
+		Log3 $name, 4, "$name: Get | $cmd read file $EPG_file_name with variant $Variant" if ($Variant);
 
+		$HTML = {};
 		@channel_available = ();
 		%progamm = ();
+		my $cnt = 0;
 
 		if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
 			open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
@@ -174,17 +161,37 @@ sub EPG_Get($$$@) {
 					$hash->{EPG_file_format} = "WebGrab+Plus" if ($_ =~ /.*generator-info-name="WebGrab+Plus.*/);
 					#XMLTV.se       <tv generator-info-name="Vind 2.52.12" generator-info-url="https://xmltv.se">
 					$hash->{EPG_file_format} = "XMLTV.se" if ($_ =~ /.*generator-info-url="https:\/\/xmltv.se.*/);
+					#teXXas via RSS  <channel><title>teXXas - 
+					$hash->{EPG_file_format} = "teXXas_RSS" if ($_ =~ /.*<channel><title>teXXas -.*<link>http:\/\/www.texxas.de\/tv\/programm.*/);
 
-					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
-					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
-						Log3 $name, 5, "$name: Get | $cmd id: $ch_id -> display_name: ".$1;
-						$progamm{$ch_id}{name} = $1;
-						push(@channel_available,$1);
+					if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
+						$cnt++;
+						$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
+						if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
+							Log3 $name, 5, "$name: Get | $cmd id: $ch_id -> display_name: ".$1;
+							$progamm{$ch_id}{name} = $1;
+							push(@channel_available,$1);
+						}					
+					} elsif ($Variant eq "teXXas_RSS") {
+						$cnt++;
+						$hash->{EPG_data_time} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
+						$hash->{EPG_data_time} = "20:15" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/heute\/2015\//);
+						my @RRS = split("<item>", $_);
+						my $remove = shift @RRS;
+						for (@RRS) {
+							push(@channel_available,$1) if ($_ =~ /<dc:subject>(.*)<\/dc:subject>/);
+						}
 					}
 				}
 			close FileCheck;
+			
+			if ($cnt == 0) {
+				readingsSingleUpdate($hash, "state", "unknown methode! need development!", 1);
+				return "";
+			}
 
 			@channel_available = sort @channel_available;
+			#Log3 $name, 3, Dumper\@channel_available;
 			$state = "available channels loaded";
 			$hash->{EPG_data} = "ready to read";
 
@@ -199,182 +206,299 @@ sub EPG_Get($$$@) {
 		return undef;
 	}
 
-	if ($cmd =~ /^loadEPG/) {
-		$HTML = {};                # reset hash for HTML
-		my $start = "";            # TV time start
-		my $end = "";              # TV time end
-		my $ch_found = 0;          # counter to verification ch
-		my $data_found;            # counter to verification data
-		my $ch_name = "";          # TV channel display-name
-		my $ch_name_old = "";      # TV channel display-name before
-		my $ch_id = "";            # TV channel channel id
-		my $title = "";            # TV title
-		my $subtitle = "";         # TV subtitle
-		my $desc = "";             # TV desc
-		my $today_start = "";      # today time start
-		my $today_end = "";        # today time end
-		my $hour_diff_read = "";   # hour diff from file
+	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
+		if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "") {
+			$getlist.= "loadEPG_now:noArg ";               # now
+			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
+			$getlist.= "loadEPG_today:noArg ";             # today all
 
-		Log3 $name, 4, "$name: $cmd from file $EPG_file_name";
-		#Log3 $name, 3, "$name: Get | $TimeNow";
+			my $TimeNowMod = $TimeNow;
+			$TimeNowMod =~ s/-|:|\s//g;
 
-		my $off_h = 0;
-		my @local = (localtime(time+$off_h*60*60));
-		my @gmt = (gmtime(time+$off_h*60*60));
-		my $TimeLocaL_GMT_Diff = $gmt[2]-$local[2] + ($gmt[5] <=> $local[5] || $gmt[7] <=> $local[7])*24;
-		if ($TimeLocaL_GMT_Diff < 0) {
-			$TimeLocaL_GMT_Diff = abs($TimeLocaL_GMT_Diff);
-			$TimeLocaL_GMT_Diff = "+".sprintf("%02s", abs($TimeLocaL_GMT_Diff))."00";
-		} else {
-			$TimeLocaL_GMT_Diff = sprintf("-%02s", $TimeLocaL_GMT_Diff) ."00";
-		}
+			# every hour list #
+			my $loadEPG_list = "";
+			for my $d (substr($TimeNowMod,8, 2) +1 .. 23) {
+				$loadEPG_list.= substr($TimeNowMod,0, 8)."_".sprintf("%02s",$d)."00,";
+			}
 
-		Log3 $name, 4, "$name: $cmd localtime     ".localtime(time+$off_h*60*60);
-		Log3 $name, 4, "$name: $cmd gmtime        ".gmtime(time+$off_h*60*60);
-		Log3 $name, 4, "$name: $cmd diff (GMT-LT) " . $TimeLocaL_GMT_Diff;
-
-		$TimeNow =~ s/-|:|\s//g;
-		$TimeNow.= " $TimeLocaL_GMT_Diff";                       # loadEPG_now   20191016150432 +0200
-
-		if ($cmd eq "loadEPG_Prime") {
-			if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
-				my @time = split(/-\s:/,FmtDateTime(time()));
-				$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
-				$TimeNow =~ s/-|:|\s//g;
-				$TimeNow.= " +0200";
-				substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
-			} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
-				substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
+			if ($loadEPG_list =~ /,$/) {
+				$loadEPG_list = substr($loadEPG_list,0, -1);
+				$getlist.= "loadEPG:".$loadEPG_list." " ;
 			}
 		}
+		
+		if ($cmd =~ /^loadEPG/) {
+			$HTML = {};                # reset hash for HTML
+			my $start = "";            # TV time start
+			my $end = "";              # TV time end
+			my $ch_found = 0;          # counter to verification ch
+			my $data_found;            # counter to verification data
+			my $ch_name = "";          # TV channel display-name
+			my $ch_name_old = "";      # TV channel display-name before
+			my $ch_id = "";            # TV channel channel id
+			my $title = "";            # TV title
+			my $subtitle = "";         # TV subtitle
+			my $desc = "";             # TV desc
+			my $today_start = "";      # today time start
+			my $today_end = "";        # today time end
+			my $hour_diff_read = "";   # hour diff from file
 
-		if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
-			$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
-			$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
-		}
+			Log3 $name, 4, "$name: $cmd from file $EPG_file_name";
+			#Log3 $name, 3, "$name: Get | $TimeNow";
 
-		if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
-			$cmd2 =~ s/_//g;
-			$cmd2.= "10 $TimeLocaL_GMT_Diff";
-			$TimeNow = $cmd2;
-		}
+			my $off_h = 0;
+			my @local = (localtime(time+$off_h*60*60));
+			my @gmt = (gmtime(time+$off_h*60*60));
+			my $TimeLocaL_GMT_Diff = $gmt[2]-$local[2] + ($gmt[5] <=> $local[5] || $gmt[7] <=> $local[7])*24;
+			if ($TimeLocaL_GMT_Diff < 0) {
+				$TimeLocaL_GMT_Diff = abs($TimeLocaL_GMT_Diff);
+				$TimeLocaL_GMT_Diff = "+".sprintf("%02s", abs($TimeLocaL_GMT_Diff))."00";
+			} else {
+				$TimeLocaL_GMT_Diff = sprintf("-%02s", $TimeLocaL_GMT_Diff) ."00";
+			}
 
-		Log3 $name, 4, "$name: $cmd | TimeNow          -> $TimeNow";
+			Log3 $name, 4, "$name: $cmd localtime     ".localtime(time+$off_h*60*60);
+			Log3 $name, 4, "$name: $cmd gmtime        ".gmtime(time+$off_h*60*60);
+			Log3 $name, 4, "$name: $cmd diff (GMT-LT) " . $TimeLocaL_GMT_Diff;
 
-		if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
-			open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
-				while (<FileCheck>) {
-					if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
-						my $search = $progamm{$4}->{name};
-						if (grep /$search($|,)/, $Ch_select) {                                       # find in attributes channel
-							($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $progamm{$4}->{name});
-							if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
-								#Log3 $name, 4, "$name: $cmd | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
-								my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
-								#Log3 $name, 4, "$name: $cmd | hour_diff_result $hour_diff";
+			$TimeNow =~ s/-|:|\s//g;
+			$TimeNow.= " $TimeLocaL_GMT_Diff";                       # loadEPG_now   20191016150432 +0200
 
-								my @start_new = split("",$start);
-								my @end_new = split("",$end);
-								#Log3 $name, 4, "$name: $cmd | ".'sec | min | hour | mday | month | year';
-								#Log3 $name, 4, "$name: $cmd | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
-								#Log3 $name, 4, "$name: $cmd | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
-								#Log3 $name, 4, "$name: $cmd | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
-								#Log3 $name, 4, "$name: $cmd | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
-								#Log3 $name, 4, "$name: $cmd | start            -> $start";             # 20191023211500 +0000
-								#Log3 $name, 4, "$name: $cmd | end              -> $end";               # 20191023223000 +0000
+			if ($cmd eq "loadEPG_Prime") {
+				if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
+					my @time = split(/-\s:/,FmtDateTime(time()));
+					$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
+					$TimeNow =~ s/-|:|\s//g;
+					$TimeNow.= " +0200";
+					substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
+				} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
+					substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
+				}
+			}
 
-								if (index($hour_diff,"-")) {
-									$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-									$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-								} else {
-									$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-									$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+			if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
+				$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
+				$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
+			}
+
+			if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
+				$cmd2 =~ s/_//g;
+				$cmd2.= "10 $TimeLocaL_GMT_Diff";
+				$TimeNow = $cmd2;
+			}
+
+			Log3 $name, 4, "$name: $cmd | TimeNow          -> $TimeNow";
+
+			if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
+				open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+					while (<FileCheck>) {
+						if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
+							my $search = $progamm{$4}->{name};
+							if (grep /$search($|,)/, $Ch_select) {                                       # find in attributes channel
+								($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $progamm{$4}->{name});
+								if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
+									#Log3 $name, 4, "$name: $cmd | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
+									my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
+									#Log3 $name, 4, "$name: $cmd | hour_diff_result $hour_diff";
+
+									my @start_new = split("",$start);
+									my @end_new = split("",$end);
+									#Log3 $name, 4, "$name: $cmd | ".'sec | min | hour | mday | month | year';
+									#Log3 $name, 4, "$name: $cmd | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
+									#Log3 $name, 4, "$name: $cmd | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
+									#Log3 $name, 4, "$name: $cmd | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
+									#Log3 $name, 4, "$name: $cmd | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
+									#Log3 $name, 4, "$name: $cmd | start            -> $start";             # 20191023211500 +0000
+									#Log3 $name, 4, "$name: $cmd | end              -> $end";               # 20191023223000 +0000
+
+									if (index($hour_diff,"-")) {
+										$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+										$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+									} else {
+										$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+										$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+									}
+
+									#Log3 $name, 4, "$name: $cmd | UTC start new    -> $start";
+									#Log3 $name, 4, "$name: $cmd | UTC end new      -> $end";
+
+									$start = FmtDateTime($start);
+									$end = FmtDateTime($end);
+									$start =~ s/-|:|\s//g;
+									$end =~ s/-|:|\s//g;
+									$start.= " $TimeLocaL_GMT_Diff";
+									$end.= " $TimeLocaL_GMT_Diff";
+
+									#Log3 $name, 4, "$name: $cmd | start new        -> $start";
+									#Log3 $name, 4, "$name: $cmd | end new          -> $end";
 								}
 
-								#Log3 $name, 4, "$name: $cmd | UTC start new    -> $start";
-								#Log3 $name, 4, "$name: $cmd | UTC end new      -> $end";
-
-								$start = FmtDateTime($start);
-								$end = FmtDateTime($end);
-								$start =~ s/-|:|\s//g;
-								$end =~ s/-|:|\s//g;
-								$start.= " $TimeLocaL_GMT_Diff";
-								$end.= " $TimeLocaL_GMT_Diff";
-
-								#Log3 $name, 4, "$name: $cmd | start new        -> $start";
-								#Log3 $name, 4, "$name: $cmd | end new          -> $end";
-							}
-
-							if ($cmd ne "loadEPG_today") {
-								$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
-							} else {
-								$ch_found++ if ($today_end gt $start && $today_start lt $end);                     # Zeitpunktsuche, kompletter Tag
+								if ($cmd ne "loadEPG_today") {
+									$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
+								} else {
+									$ch_found++ if ($today_end gt $start && $today_start lt $end);                     # Zeitpunktsuche, kompletter Tag
+								}
 							}
 						}
+						$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             # title
+						$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  # subtitle
+						$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                # desc
+
+						if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
+							$data_found = -1 if ($ch_name_old ne $ch_name);                                        # Reset bei Kanalwechsel
+							$data_found++;
+							Log3 $name, 4, "#################################################";
+							Log3 $name, 4, "$name: $cmd | ch_name          -> $ch_name";
+							Log3 $name, 4, "$name: $cmd | ch_name_old      -> $ch_name_old";
+							Log3 $name, 4, "$name: $cmd | EPG information  -> $data_found";
+							Log3 $name, 4, "$name: $cmd | title            -> $title";
+							Log3 $name, 4, "$name: $cmd | subtitle         -> $subtitle";
+							Log3 $name, 4, "$name: $cmd | desc             -> $desc.\n";
+
+							$HTML->{$ch_name}{ch_name} = $ch_name;
+							$HTML->{$ch_name}{ch_id} = $ch_id;
+
+							if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
+								foreach my $i (0 .. $#Ch_select_array) {
+									if ($Ch_select_array[$i] eq $ch_name) {
+										my $value_new = 999;
+										$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
+										$HTML->{$Ch_select_array[$i]}{ch_wish} = $value_new;
+										Log3 $name, 4, "$name: $cmd old numbre of ".$Ch_select_array[$i]." set to ".$value_new;
+									}
+								}
+							} else {
+								$HTML->{$ch_name}{ch_wish} = 999;
+							}
+
+							$HTML->{$ch_name}{EPG}[$data_found]{start} = $start;
+							$HTML->{$ch_name}{EPG}[$data_found]{end} = $end;
+							$HTML->{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
+							$HTML->{$ch_name}{EPG}[$data_found]{title} = $title;
+							$HTML->{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
+							$HTML->{$ch_name}{EPG}[$data_found]{desc} = $desc;
+
+							$ch_found = 0;
+							$ch_name_old = $ch_name;
+							$ch_name = "";
+							$desc = "";
+							$hour_diff_read = "";
+							$subtitle = "";
+							$title = "";
+						}
 					}
-					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             # title
-					$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  # subtitle
-					$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                # desc
+				close FileCheck;
 
-					if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
-						$data_found = -1 if ($ch_name_old ne $ch_name);                                        # Reset bei Kanalwechsel
-						$data_found++;
-						Log3 $name, 4, "$name: $cmd | ch_name          -> $ch_name";
-						Log3 $name, 4, "$name: $cmd | ch_name_old      -> $ch_name_old";
-						Log3 $name, 4, "$name: $cmd | EPG information  -> $data_found";
-						Log3 $name, 4, "$name: $cmd | title            -> $title";
-						Log3 $name, 4, "$name: $cmd | subtitle         -> $subtitle";
-						Log3 $name, 4, "$name: $cmd | desc             -> $desc.\n";
+				$hash->{EPG_data} = "all channel information loaded" if ($data_found != -1);
+				$hash->{EPG_data} = "no channel information available!" if ($data_found == -1);
+			} else {
+				readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
+				Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+				return "ERROR: no file found!";
+			}
+		}
+	}
+	
+	if ($Variant eq "teXXas_RSS" ) {
+		$getlist.= "loadEPG_now:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "now");
+		$getlist.= "loadEPG_Prime:noArg " if ($hash->{EPG_data_time} && $hash->{EPG_data_time} eq "20:15");
 
-						$HTML->{$ch_name}{ch_name} = $ch_name;
-						$HTML->{$ch_name}{ch_id} = $ch_id;
+		if ($cmd ne "?") {
+			if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
+				open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+					my $string = "";
+					while (<FileCheck>) {
+						#chomp($_);
+						$string .= $_;
+					}
+				close FileCheck;
+				utf8::encode($string);
+				#Log3 $name, 4, $string;
+				my @RRS = split("<item>", $string);
+				my $remove = shift @RRS;
 
+				for (@RRS) {
+					my $ch_found = 0;
+					my $ch_name;
+					my $desc = "";
+					my $end;
+					my $start;
+					my $time;
+
+					if($_ =~ /<dc:subject>(.*)<\/dc:subject>/) {
+						Log3 $name, 5, "$name: $cmd | look for    -> ".$1." selection in $Ch_select" if ($Ch_select);
+						my $search = $1;
+						if (index($search,"+") >= 0) {
+							substr($search,index($search,"+"),1,'\+');
+						}
+
+						if ( ($Ch_select) && (grep /$search($|,)/, $Ch_select) ) {
+							Log3 $name, 5, "$name: $cmd |             -> $1 found";
+							$ch_name = $1;
+							$ch_found++;						
+						} else {
+							Log3 $name, 5, "$name: $cmd |             -> not $1 found";
+						}
+					}
+
+					if($_ =~ /:\s(.*)<\/title>/ && $ch_found != 0) {
+						Log3 $name, 4, "$name: $cmd | channel     -> ".$ch_name;
+						Log3 $name, 4, "$name: $cmd | title       -> ".$1 ;
+						$HTML->{$ch_name}{EPG}[0]{title} = $1;
+
+						### need check
 						if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
-							my @Ch_select_array = split(",",$Ch_select);
-							my @Ch_sort_array = split(",",$Ch_sort);
-
 							foreach my $i (0 .. $#Ch_select_array) {
 								if ($Ch_select_array[$i] eq $ch_name) {
 									my $value_new = 999;
 									$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
 									$HTML->{$Ch_select_array[$i]}{ch_wish} = $value_new;
-									Log3 $name, 4, "$name: $cmd old numbre of ".$Ch_select_array[$i]." set to ".$value_new;
+									Log3 $name, 4, "$name: $cmd | ch numbre   -> set to ".$value_new;
 								}
 							}
 						} else {
-							$HTML->{$ch_name}{ch_wish} = 999;						
+							$HTML->{$ch_name}{ch_wish} = 999;
 						}
+						### need check attribut
+						$HTML->{$ch_name}{ch_name} = $ch_name;						
+					}
 
-						$HTML->{$ch_name}{EPG}[$data_found]{start} = $start;
-						$HTML->{$ch_name}{EPG}[$data_found]{end} = $end;
-						$HTML->{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
-						$HTML->{$ch_name}{EPG}[$data_found]{title} = $title;
-						$HTML->{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
-						$HTML->{$ch_name}{EPG}[$data_found]{desc} = $desc;
+					if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?(.*)]]/ && $ch_found != 0) {
+						Log3 $name, 4, "$name: $cmd | time        -> ".$2;    # 02.11.2019 13:35 - 14:30
+						$time = $2;
+						Log3 $name, 4, "$name: $cmd | start       -> ".$4;
+						$start = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($4,0,2).substr($4,3,2) . "";
+						Log3 $name, 4, "$name: $cmd | start mod   -> ".$start;
+						Log3 $name, 4, "$name: $cmd | end         -> ".$5;
+						$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";						
+						Log3 $name, 4, "$name: $cmd | end mod     -> ".$end;
+						$desc = $7;
+						Log3 $name, 4, "$name: $cmd | description -> ".$7;
+						Log3 $name, 4, "#################################################";
 
-						$ch_found = 0;
-						$ch_name_old = $ch_name;
-						$ch_name = "";
-						$desc = "";
-						$hour_diff_read = "";
-						$subtitle = "";
-						$title = "";
+						$HTML->{$ch_name}{EPG}[0]{start} = $start;
+						$HTML->{$ch_name}{EPG}[0]{end} = $end;
+						$HTML->{$ch_name}{EPG}[0]{desc} = $desc;
 					}
 				}
-			close FileCheck;
 
-			$hash->{EPG_data} = "all channel information loaded" if ($data_found != -1);
-			$hash->{EPG_data} = "no channel information available!" if ($data_found == -1);
-		} else {
-			readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
-			Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
-			return "ERROR: no file found!";
+				#Log3 $name, 4, Dumper\%{$HTML};
+
+			} else {
+				readingsSingleUpdate($hash, "state", "ERROR: loaded Information Canceled. file not found!", 1);
+				Log3 $name, 3, "$name: $cmd | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+				return "ERROR: no file found!";
+			}
 		}
+	}
+
+	if ($cmd =~ /^loadEPG/) {
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "") if (scalar keys %{$HTML});
 		
 		readingsSingleUpdate($hash, "state", $cmd . " accomplished", 1);
-		return undef;
+		return undef;	
 	}
+	
 	return "Unknown argument $cmd, choose one of $getlist";
 }
 
@@ -383,6 +507,7 @@ sub EPG_Attr() {
 	my ($cmd, $name, $attrName, $attrValue) = @_;
 	my $hash = $defs{$name};
 	my $typ = $hash->{TYPE};
+	my $Variant = AttrVal($name, "Variant", undef);
 
 	if ($cmd eq "set") {
 		if ($attrName eq "disable") {
@@ -397,6 +522,22 @@ sub EPG_Attr() {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
 		}
+		
+		if($attrName eq "Variant") {
+			if ($Variant && ($attrValue ne $Variant) || not $Variant) {
+				delete $hash->{EPG_data} if ($hash->{EPG_data});
+				delete $hash->{EPG_file_age} if ($hash->{EPG_file_age});
+				delete $hash->{EPG_file_format} if ($hash->{EPG_file_format});
+				delete $hash->{EPG_file_name} if ($hash->{EPG_file_name});
+				
+				@channel_available = ();
+				%progamm = ();
+				$HTML = {};
+
+				FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+				return undef;
+			}
+		}
 	}
 }
 
@@ -409,7 +550,8 @@ sub EPG_FW_Detail($@) {
 	my $cnt = 0;
 	my $ret = "";
 
-	Log3 $name, 4, "$name: FW_Detail is running";
+	Log3 $name, 5, "$name: FW_Detail is running";
+	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
 
 	if ($Ch_select) {
 		my @Channels_value = split(",", $Ch_select);
@@ -463,6 +605,7 @@ sub EPG_FW_Detail($@) {
 								Channel.push($(this).attr(\'name\'));
 								Channel_id.push($(this).attr(\'id\'));
 							})
+
 							$("#EPG_ListWindow td input:text").each(function() {
 								var n = Channel_id.indexOf($(this).attr(\'id\'));
 								if (n != -1) {
@@ -474,8 +617,10 @@ sub EPG_FW_Detail($@) {
 									desired_channel.push(m);
 								}
 							})
-							FW_cmd(FW_root+ \'?XHR=1"'.$FW_CSRF.'"&cmd={EPG_FW_Attr_Channels("'.$name.'","\'+Channel+\'","\'+desired_channel+\'")}\');
 
+							var Channel = encodeURIComponent(Channel); /* need to view + | Javascript must encode + */
+
+							FW_cmd(FW_root+ \'?XHR=1"'.$FW_CSRF.'"&cmd={EPG_FW_Attr_Channels("'.$name.'","\'+Channel+\'","\'+desired_channel+\'")}\');
 							$(this).dialog("close");
 							$(div).remove();
 							location.reload();
@@ -514,10 +659,12 @@ sub EPG_FW_Detail($@) {
 			$View_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
 			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$View_Subtitle</tr>";
-	
+
+			#Log3 $name, 3, Dumper\%{$HTML};	
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
 			#foreach my $ch (sort keys %{$HTML}) {
+
 			foreach my $ch (@positioned) {
 				## Kanäle ##
 				#Log3 $name, 3, "$name: ch                -> $ch (".$HTML->{$ch}{ch_wish}.")";
@@ -623,6 +770,7 @@ sub EPG_FW_Attr_Channels {
 
 		CommandGet($hash, "$name loadEPG_now");
 
+    ## list of all available channels - set ch_wish from HTML input ##
 		foreach my $i (0 .. $#Ch_select_array) {
 			if ($Ch_sort_array[$i] != 0) {
 				Log3 $name, 4, "$name: FW_Attr_Channels new numbre of ".$Ch_select_array[$i]." set to ".$Ch_sort_array[$i];
@@ -715,12 +863,15 @@ sub EPG_Notify($$) {
 	my $events = deviceEvents($dev_hash, 1);
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
+	my $Variant = AttrVal($name, "Variant", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
 
-		EPG_File_check($hash) if($DownloadFile);
-		CommandGet($hash,"$name loadEPG_now") if($DownloadFile && $Ch_select);
+		if ($Variant) {
+			EPG_File_check($hash) if($DownloadFile);
+			CommandGet($hash,"$name loadEPG_now") if($DownloadFile && $Ch_select);		
+		}
 	}
 
 	return undef;
@@ -802,8 +953,9 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 				<li><a href="https://rytec.ricx.nl/epg_data/" target=”_blank”>https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
 			</ul><br>
 	</li>
-	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
-	<li> xmltv.se (<a href="https://xmltv.se">Provides XMLTV schedules for Europe</a>) </li>
+	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423" target="_blank">IPTV.community</a>) </li>
+	<li> teXXas.de - RSS (<a href="http://www.texxas.de/rss/" target="_blank">TV-Programm RSS Feed</a>) </li>
+	<li> xmltv.se (<a href="https://xmltv.se" target="_blank">Provides XMLTV schedules for Europe</a>) </li>
 	
 </ul>
 <br><br>
@@ -874,8 +1026,9 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 				<li><a href="https://rytec.ricx.nl/epg_data/" target=”_blank”>https://rytec.ricx.nl/epg_data/</a> <small>&nbsp;&nbsp;(&#10003; - Auswahl nach L&auml;ndern)</small></li>
 			</ul><br>
 	</li>
-	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423">IPTV.community</a>) </li>
-	<li> xmltv.se (<a href="https://xmltv.se">Provides XMLTV schedules for Europe</a>) </li>
+	<li> IPTV_XML (<a href="https://iptv.community/threads/epg.5423" target="_blank">IPTV.community</a>) </li>
+	<li> teXXas (<a href="http://www.texxas.de/rss/" target="_blank">teXXas.de - TV-Programm RSS Feed</a>) </li>
+	<li> xmltv.se (<a href="https://xmltv.se" target="_blank">Provides XMLTV schedules for Europe</a>) </li>
 	
 </ul>
 <br><br>
