@@ -45,8 +45,8 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{UndefFn}               = "EPG_Undef";
 	$hash->{FW_deviceOverview}     = 1;
-	$hash->{FW_addDetailToSummary} = 1;                # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Icon:textField-long DownloadFile DownloadURL HTTP_TimeOut Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
+	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
+	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Icon:textField-long Ch_Info_to_Reading:yes,no DownloadFile DownloadURL HTTP_TimeOut Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
 												             #$readingFnAttributes;
 }
 
@@ -115,9 +115,9 @@ sub EPG_Get($$$@) {
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", undef);
+	$cmd2 = "" if (!$cmd2);
 
 	my $getlist = "loadFile:noArg ";
-
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && ReadingsVal($name, "HttpResponse", undef) eq "downloaded");
 
 	if ($cmd ne "?") {
@@ -172,15 +172,24 @@ sub EPG_Get($$$@) {
 			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
-			$cmd2 = "" if (!$cmd2);
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
 		}
 	}
 
 	if ($Variant eq "teXXas_RSS" ) {
+		if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "") {
+			$getlist.= "loadEPG_now:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "now" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
+			$getlist.= "loadEPG_Prime:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "20:15" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
+		}
+ 		
 		if ($cmd =~ /^loadEPG/) {
-			return "$cmd devleopment $Variant";
+			$HTML = {};
+			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
+			Log3 $name, 4, "$name: get $cmd - starting blocking call";
+
+			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v2", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v2Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
+			return undef;
 		}
 	}
 
@@ -207,6 +216,10 @@ sub EPG_Attr() {
 	}
 	
 	if ($cmd eq "del") {
+		if ($attrName eq "Variant") {
+			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
+			return undef;
+		}
 	}
 }
 
@@ -597,6 +610,7 @@ sub EPG_nonBlock_available_channels($) {
 	my $Variant = "unknown";
 	my $ch_id;
 	my $ok = "ok";
+	my $additive_info;
 
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
@@ -619,12 +633,14 @@ sub EPG_nonBlock_available_channels($) {
 					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
 					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
 						Log3 $name, 5, "$name: nonBlocking_available_channels id: $ch_id -> display_name: ".$1;
+						Log3 $name, 4, "$name: nonBlocking_available_channels set helper $Variant";
 						$hash->{helper}{programm}{$ch_id}{name} = $1;
 						push(@channel_available,$1);
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
-					$hash->{EPG_data_time} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
-					$hash->{EPG_data_time} = "20:15" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/heute\/2015\//);
+					$hash->{helper}{programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
+					$hash->{helper}{programm} = "20:15" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/heute\/2015\//);
+					Log3 $name, 4, "$name: nonBlocking_available_channels set helper $Variant";
 					my @RRS = split("<item>", $_);
 					my $remove = shift @RRS;
 					for (@RRS) {
@@ -633,6 +649,12 @@ sub EPG_nonBlock_available_channels($) {
 				}
 			}
 		close FileCheck;
+		
+		if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
+			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{programm});		
+		} elsif ($Variant eq "teXXas_RSS") {
+			$additive_info = $hash->{helper}{programm};	
+		}
 	} else {
 		$Variant = "not detectable";
 		$ok = "error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
@@ -643,9 +665,8 @@ sub EPG_nonBlock_available_channels($) {
 		# Log3 $name, 3, $hash->{helper}{programm}{$ch}{name};
 	# }
 
-	my $json_ch_table = JSON->new->utf8(0)->encode($hash->{helper}{programm});
 	my $ch_available = join(";", @channel_available);
-	$return = $name."|".$EPG_file_name."|".$ok."|".$Variant."|".$ch_available."|".$json_ch_table;
+	$return = $name."|".$EPG_file_name."|".$ok."|".$Variant."|".$ch_available."|".$additive_info;
 
 	return $return;
 }
@@ -653,8 +674,9 @@ sub EPG_nonBlock_available_channels($) {
 #####################
 sub EPG_nonBlock_available_channelsDone($) {
 	my ($string) = @_;
-	my ($name, $EPG_file_name, $ok, $Variant, $ch_available, $json_ch_table) = split("\\|", $string);
+	my ($name, $EPG_file_name, $ok, $Variant, $ch_available, $additive_info) = split("\\|", $string);
   my $hash = $defs{$name};
+	my $ch_table = "";
 
 	return unless(defined($string));
   Log3 $name, 4, "$name: nonBlock_available_channelsDone running";
@@ -674,12 +696,16 @@ sub EPG_nonBlock_available_channelsDone($) {
   @channel_available = split(';', $ch_available);
 	@channel_available = sort @channel_available;
 	
-	$json_ch_table = eval {encode_utf8( $json_ch_table )};
-	my $ch_table = decode_json($json_ch_table);
-	
-	foreach my $ch (sort keys %{$ch_table}) {
-		Log3 $name, 5, "$name: nonBlock_available_channelsDone channel ".$ch . " -> " . $ch_table->{$ch}->{name};
+	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
+		$additive_info = eval {encode_utf8( $additive_info )};
+		$ch_table = decode_json($additive_info);
+
+		foreach my $ch (sort keys %{$ch_table}) {
+			Log3 $name, 5, "$name: nonBlock_available_channelsDone channel ".$ch . " -> " . $ch_table->{$ch}->{name};
+		}	
 	}
+
+	$ch_table = $additive_info if ($Variant eq "teXXas_RSS");
 
 	$hash->{helper}{programm} = $ch_table;
 	CommandAttr($hash,"$name Variant $Variant") if ($Variant ne "unknown");
@@ -884,6 +910,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
 	my ($name, $EPG_file_name, $EPG_info, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
+	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 
   Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
@@ -893,6 +920,147 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$HTML = decode_json($json_HTML);
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
 
+	if ($Ch_Info_to_Reading eq "yes") {
+		## create Readings ##
+		readingsBeginUpdate($hash);
+
+		foreach my $ch (sort keys %{$HTML}) {
+			## Kanäle ##
+			Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done ch -> $ch";
+			readingsBulkUpdate($hash, $ch, "development");
+		}
+
+		readingsEndUpdate($hash, 1);
+	}
+
+	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
+}
+
+#####################
+sub EPG_nonBlock_loadEPG_v2($) {
+	my ($string) = @_;
+	my ($name, $EPG_file_name, $cmd, $cmd2) = split("\\|", $string);
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
+  my $hash = $defs{$name};
+  my $return;
+
+  Log3 $name, 4, "$name: nonBlock_loadEPG_v2 running";
+  Log3 $name, 5, "$name: nonBlock_loadEPG_v2 string=$string";
+	Log3 $name, 4, "$name: nonBlock_loadEPG_v2 with $cmd from file $EPG_file_name";
+
+	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
+	my @Ch_sort_array = split(",",$Ch_sort) if ($Ch_sort);
+
+	my $EPG_info = "";	
+	my $data_found = -1;         # counter to verification data
+
+	if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
+		open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+			my $string = "";
+			while (<FileCheck>) {
+				$string .= $_;
+			}
+		close FileCheck;
+		#Log3 $name, 4, "$name: nonBlock_loadEPG_v2 $string";
+		my @RRS = split("<item>", $string);
+		my $remove = shift @RRS;
+
+		for (@RRS) {
+			my $ch_found = 0;
+			my $ch_name;
+			my $desc = "";
+			my $end;
+			my $start;
+			my $time;
+
+			if($_ =~ /<dc:subject>(.*)<\/dc:subject>/) {
+				Log3 $name, 5, "$name: nonBlock_loadEPG_v2 look for    -> ".$1." selection in $Ch_select" if ($Ch_select);
+				my $search = $1;
+				if (index($search,"+") >= 0) {
+					substr($search,index($search,"+"),1,'\+');
+				}
+
+				if ( ($Ch_select) && (grep /$search($|,)/, $Ch_select) ) {
+					#Log3 $name, 3, "$name: $cmd $_";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v2             -> $1 found";
+					$ch_name = $1;
+					$ch_found++;
+					$data_found++;
+				} else {
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v2             -> not $1 found";
+				}
+			}
+
+			if($_ =~ /:\s(.*)<\/title>/ && $ch_found != 0) {
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 channel     -> ".$ch_name;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 title       -> ".$1 ;
+				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{title} = $1;
+
+				### need check
+				if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
+					foreach my $i (0 .. $#Ch_select_array) {
+						if ($Ch_select_array[$i] eq $ch_name) {
+							my $value_new = 999;
+							$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
+							$hash->{helper}{HTML}{$Ch_select_array[$i]}{ch_wish} = $value_new;
+							Log3 $name, 4, "$name: nonBlock_loadEPG_v2 ch numbre   -> set to ".$value_new;
+						}
+					}
+				} else {
+					$hash->{helper}{HTML}{$ch_name}{ch_wish} = 999;
+				}
+				### need check attribut
+				$hash->{helper}{HTML}{$ch_name}{ch_name} = $ch_name;
+			}
+
+			if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?((.*)((\n.*)?)+)]]/ && $ch_found != 0) {
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 time        -> ".$2;    # 02.11.2019 13:35 - 14:30
+				$time = $2;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start       -> ".$4;
+				$start = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($4,0,2).substr($4,3,2) . "";
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start mod   -> ".$start;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 end         -> ".$5;
+				$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 end mod     -> ".$end;
+				$desc = $7;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 description -> ".$7;
+				Log3 $name, 4, "#################################################";
+
+				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{start} = $start;
+				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{end} = $end;
+				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{desc} = $desc;
+			}
+		}
+		$EPG_info = "EPG all channel information loaded" if ($data_found != -1);
+		$EPG_info = "EPG no channel information available!" if ($data_found == -1);
+	} else {
+		$EPG_info = "ERROR: loaded Information Canceled. file not found!";
+		Log3 $name, 3, "$name: nonBlock_loadEPG_v2 | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+	}
+
+	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
+
+	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$json_HTML;
+	return $return;
+}
+
+#####################
+sub EPG_nonBlock_loadEPG_v2Done($) {
+	my ($string) = @_;
+	my ($name, $EPG_file_name, $EPG_info, $json_HTML) = split("\\|", $string);
+  my $hash = $defs{$name};
+	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
+
+  Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running";
+  Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
+	delete($hash->{helper}{RUNNING_PID});
+	
+	$json_HTML = eval {encode_utf8( $json_HTML )};
+	$HTML = decode_json($json_HTML);
+	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
+	
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
 }
@@ -991,6 +1159,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul><li><a name="Ch_sort">Ch_sort</a><br>
 	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired new channelnumbre.<br>
 	<i>Normally you do not have to edit this attribute manually. Once you clear this attribute, there is no manual sort!</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
+	You can write the data in readings (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
@@ -1067,6 +1237,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul><li><a name="Ch_sort">Ch_sort</a><br>
 	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschte neue Kanalnummer definierte.<br>
 	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten. Sobald man dieses Attribut l&ouml;scht, ist keine manuelle Sortierung vorhanden!</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
+	Hiermit kann man die Daten in Readings schreiben lassen (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
