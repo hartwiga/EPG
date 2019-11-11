@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-07 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-11 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -114,7 +114,7 @@ sub EPG_Get($$$@) {
 	my $cmd2 = $a[0];
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
-	my $Variant = AttrVal($name, "Variant", undef);
+	my $Variant = AttrVal($name, "Variant", "unknown");
 	$cmd2 = "" if (!$cmd2);
 
 	my $getlist = "loadFile:noArg ";
@@ -926,8 +926,13 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 		foreach my $ch (sort keys %{$HTML}) {
 			## Kanäle ##
-			Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done ch -> $ch";
-			readingsBulkUpdate($hash, $ch, "development");
+			Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done ch          -> $ch";
+			# title start end
+			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+				Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done array value -> ".$i;
+				Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+			}
+			#readingsBulkUpdate($hash, $ch, "development");
 		}
 
 		readingsEndUpdate($hash, 1);
@@ -1110,7 +1115,14 @@ This is a module which retrieves the data for an electronic program guide and di
 You have to choose a source and only then can the data of the TV Guide be displayed.<br>
 The specifications for the attribute Variant | DownloadFile and DownloadURL are mandatory.
 <br><br>
-<ul><u>Currently the following services are supported:</u>
+<ul>
+	<u>Currently the following file extensions are supported</u><br>
+	<li>.gz</li>
+	<li>.xml</li>
+	<li>.xml.gz</li>
+	<li>.xz</li>
+	<br>
+	<u>Currently the following services are supported:</u>
 	<li>Rytec (Rytec EPG Downloader)<br><br>
 			well-known sources:<br>
 			<ul>
@@ -1187,7 +1199,15 @@ Es handelt sich hiermit um einen Modul welches die Daten f&uuml;r einen elektron
 Sie m&uuml;ssen sich f&uuml;r eine Quelle entscheiden und erst danach k&ouml;nnen Daten des TV-Guides dargestellt werden.<br>
 Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind zwingend notwendig.
 <br><br>
-<ul><u>Derzeit werden folgende Dienste unterst&uuml;tzt:</u>
+<ul>
+	<u>Derzeit werden folgende Dateiendungen unterst&uuml;tzt:</u><br>
+	<li>.gz</li>
+	<li>.xml</li>
+	<li>.xml.gz</li>
+	<li>.xz</li>
+	<br>
+
+	<u>Derzeit werden folgende Dienste unterst&uuml;tzt:</u>
 	<li>Rytec (Rytec EPG Downloader)<br><br>
 			bekannte Quellen:<br>
 			<ul>
