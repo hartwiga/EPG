@@ -143,7 +143,6 @@ sub EPG_Get($$$@) {
 	if ($cmd eq "loadFile") {
 		EPG_PerformHttpRequest($hash);
 		Log3 $name, 4, "$name: get $cmd successful";
-		EPG_File_check($hash);
 		return undef;
 	}
 
@@ -533,11 +532,12 @@ sub EPG_ParseHttpResponse($$$) {
 		}
 
 		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
-			Log3 $name, 3, "$name: ParseHttpResponse - ERROR $? and STOP";
+			Log3 $name, 3, "$name: ParseHttpResponse - ERROR ".($? & 255)." and STOP";
 			$state = "ERROR: unpack $DownloadFile";
 		} else {
 			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 			$state = "information received";
+			EPG_File_check($hash);
 		}
 
 		$HttpResponse = "downloaded";
@@ -604,7 +604,7 @@ sub EPG_File_check {
 
 	if ($DownloadFile_found != 0) {
 		Log3 $name, 4, "$name: File_check ready to search properties";	
-		my @stat_DownloadFile = stat("/opt/fhem/FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
+		my @stat_DownloadFile = stat("./FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
 		$FileAge = FmtDateTime($stat_DownloadFile[9]);                      # letzte Änderungszeit
 	} else {
 		Log3 $name, 4, "$name: File_check nothing found";
