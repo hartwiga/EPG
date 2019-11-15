@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-11 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-15 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -131,10 +131,12 @@ sub EPG_Get($$$@) {
 		return "ERROR: you need ".$missingModulEPG."package to use this command!" if ($missingModulEPG ne "");
 		## check directory and create ##
 		if (! -d "FHEM/EPG") {
-			#return "ERROR: You need the directory ./FHEM/EPG to download!";
 			my $ok = mkdir("FHEM/EPG");
-			Log3 $name, 4, "$name: directory check: $ok";
-			Log3 $name, 4, "$name: directory check: $!" if ($ok == 0);
+			if ($ok == 1) {
+				Log3 $name, 4, "$name: Get - directory automatic created ($!)"; 
+			} else {
+				Log3 $name, 4, "$name: Get - directory check - ERROR $ok";
+			}
 		}
 	}
 
@@ -589,9 +591,10 @@ sub EPG_File_check {
 	Log3 $name, 4, "$name: File_check is running";
 
 	## check files ##
-	opendir(DIR,"/opt/fhem/FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
+	opendir(DIR,"./FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
 		while( my $directory_value = readdir DIR ){
-			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
+			Log3 $name, 5, "$name: File_check - look for file -> $directory_value";
+			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value =~ /\.(gz|xz)/) {
 				Log3 $name, 4, "$name: File_check found $directory_value";
 				$DownloadFile = $directory_value;
 				$DownloadFile_found++;
