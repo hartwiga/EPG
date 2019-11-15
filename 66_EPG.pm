@@ -26,9 +26,12 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 my $missingModulEPG = "";
-eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpanm Encode) ";
-eval "use JSON;1" or $missingModulEPG .= "JSON (cpanm JSON) ";
-eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpanm XML::Simple) ";
+eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpan -i Encode) ";
+eval "use JSON;1" or $missingModulEPG .= "JSON (cpan -i JSON) ";
+eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simple) ";
+## test ##
+#eval "use IO::Compress::Gzip;1" or $missingModulEPG .= "IO::Compress:Gzip (cpan -i IO::Compress:Gzip) ";
+#eval "use IO::Compress::Xz;1" or $missingModulEPG .= "IO::Compress:Xz (cpan -i IO::Compress:Xz) ";
 
 my @channel_available;
 my $HTML = {};
@@ -126,7 +129,13 @@ sub EPG_Get($$$@) {
 		"DownloadFile - rytecAT_Basic.xz\n".
 		"\nnote: The two attributes must be entered separately!" if (!$DownloadURL || !$DownloadFile);
 		return "ERROR: you need ".$missingModulEPG."package to use this command!" if ($missingModulEPG ne "");
-		return "ERROR: You need the directory ./FHEM/EPG to download!" if (! -d "FHEM/EPG");
+		## check directory and create ##
+		if (! -d "FHEM/EPG") {
+			#return "ERROR: You need the directory ./FHEM/EPG to download!";
+			my $ok = mkdir("FHEM/EPG");
+			Log3 $name, 4, "$name: directory check: $ok";
+			Log3 $name, 4, "$name: directory check: $!" if ($ok == 0);
+		}
 	}
 
 	if ($cmd eq "loadFile") {
@@ -512,13 +521,17 @@ sub EPG_ParseHttpResponse($$$) {
 
 		local $SIG{CHLD} = 'DEFAULT';
 		if ($DownloadFile =~ /.*\.gz$/) {
-			qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                  # Datei Unpack gz
+			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz";
+			my $ok = qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);         # Datei Unpack gz
+			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
-			qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);                      # Datei Unpack xz
+			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz";
+			my $ok = qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);             # Datei Unpack xz
+			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";
 		}
 
 		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
-			Log3 $name, 3, "$name: ParseHttpResponse - ERROR and STOP";
+			Log3 $name, 3, "$name: ParseHttpResponse - ERROR $? and STOP";
 			$state = "ERROR: unpack $DownloadFile";
 		} else {
 			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
