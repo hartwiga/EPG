@@ -681,7 +681,7 @@ sub EPG_nonBlock_available_channels($) {
 	} else {
 		$Variant = "not detectable";
 		$ok = "error, file $EPG_file_name no found at ./FHEM/EPG";
-		Log3 $name, 4, "$name: nonBlocking_available_channels variant $Variant need help!";
+		Log3 $name, 4, "$name: nonBlocking_available_channels file not found, need help!";
 	}
 
 	### for TEST ###
