@@ -540,7 +540,7 @@ sub EPG_ParseHttpResponse($$$) {
 				Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";				
 				Log3 $name, 4, "$name: ParseHttpResponse - osname = $osname";
 				if ($osname eq "MSWin32") {
-					return "development";
+					Log3 $name, 4, "$name: ParseHttpResponse need MSWin32 Variant";
 				}
 			}
 		}
@@ -608,10 +608,13 @@ sub EPG_File_check {
 	opendir(DIR,"./FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
 		while( my $directory_value = readdir DIR ){
 			Log3 $name, 5, "$name: File_check - look for file -> $directory_value";
-			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
-				Log3 $name, 4, "$name: File_check found $directory_value";
-				$DownloadFile = $directory_value;
-				$DownloadFile_found++;
+			if (index($DownloadFile,$directory_value) >= 0 ) {
+				Log3 $name, 4, "$name: File_check found index $directory_value in $DownloadFile";
+				if ($directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
+					Log3 $name, 4, "$name: File_check found $directory_value";
+					$DownloadFile = $directory_value;
+					$DownloadFile_found++;
+				}
 			}
 		}
 	close DIR;
