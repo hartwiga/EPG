@@ -32,8 +32,9 @@ eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simpl
 ## variant for OS Windows ??? ##
 #eval "use IO::Compress::Gzip;1" or $missingModulEPG .= "IO::Compress:Gzip (cpan -i IO::Compress:Gzip) ";
 #eval "use IO::Compress::Xz;1" or $missingModulEPG .= "IO::Compress:Xz (cpan -i IO::Compress:Xz) ";
-eval "use Gzip;1" or $missingModulEPG .= "Gzip (apt-get install Gzip), ";
-eval "use Xz;1" or $missingModulEPG .= "xz-utils (apt-get install xz-utils) ";
+
+#eval "use Gzip;1" or $missingModulEPG .= "Gzip (apt-get install Gzip), ";
+#eval "use Xz;1" or $missingModulEPG .= "xz-utils (apt-get install xz-utils) ";
 
 my @channel_available;
 my $HTML = {};
@@ -633,9 +634,12 @@ sub EPG_nonBlock_available_channels($) {
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
 
-	if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
-		open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+	if (-e "./FHEM/EPG/$EPG_file_name") {
+		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
+			my $line_cnt = 0;
 			while (<FileCheck>) {
+				$line_cnt++;
+				Log3 $name, 4, "$name: nonBlocking_available_channels line: $_" if ($line_cnt > 0 && $line_cnt <= 3);
 				# <tv generator-info-name="Rytec" generator-info-url="http://forums.openpli.org">
 				$Variant = "Rytec" if ($_ =~ /.*generator-info-name="Rytec".*/);
 				# <tv source-data-url="http://api.tvprofil.net/" source-info-name="TvProfil API v1.7 - XMLTV" source-info-url="https://tvprofil.com">
@@ -651,14 +655,14 @@ sub EPG_nonBlock_available_channels($) {
 					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
 					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
 						Log3 $name, 5, "$name: nonBlocking_available_channels id: $ch_id -> display_name: ".$1;
-						Log3 $name, 4, "$name: nonBlocking_available_channels set helper $Variant";
+						## nonBlocking_available_channels set helper ##
 						$hash->{helper}{programm}{$ch_id}{name} = $1;
 						push(@channel_available,$1);
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
 					$hash->{helper}{programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
 					$hash->{helper}{programm} = "20:15" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/heute\/2015\//);
-					Log3 $name, 4, "$name: nonBlocking_available_channels set helper $Variant";
+					## nonBlocking_available_channels set helper ##
 					my @RRS = split("<item>", $_);
 					my $remove = shift @RRS;
 					for (@RRS) {
@@ -809,8 +813,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | TimeNow          -> $TimeNow";
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1 ".Dumper\$hash->{helper}{programm};
 
-	if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
-		open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+	if (-e "./FHEM/EPG/$EPG_file_name") {
+		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
 			while (<FileCheck>) {
 				if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
 					my $search = $hash->{helper}{programm}{$4}->{name};
@@ -981,8 +985,8 @@ sub EPG_nonBlock_loadEPG_v2($) {
 	my $EPG_info = "";	
 	my $data_found = -1;         # counter to verification data
 
-	if (-e "/opt/fhem/FHEM/EPG/$EPG_file_name") {
-		open (FileCheck,"</opt/fhem/FHEM/EPG/$EPG_file_name");
+	if (-e "./FHEM/EPG/$EPG_file_name") {
+		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
 			my $string = "";
 			while (<FileCheck>) {
 				$string .= $_;
