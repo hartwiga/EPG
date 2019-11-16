@@ -133,7 +133,7 @@ sub EPG_Get($$$@) {
 		"DownloadFile - rytecAT_Basic.xz\n".
 		"\nnote: The two attributes must be entered separately!" if (!$DownloadURL || !$DownloadFile);
 		## check directory and create ##
-		if (! -d "FHEM/EPG") {
+		if (! -d "./FHEM/EPG") {
 			my $ok = mkdir("FHEM/EPG");
 			if ($ok == 1) {
 				Log3 $name, 4, "$name: Get - directory automatic created ($!)"; 
