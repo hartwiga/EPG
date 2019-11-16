@@ -26,12 +26,14 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 my $missingModulEPG = "";
-eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpan -i Encode) ";
-eval "use JSON;1" or $missingModulEPG .= "JSON (cpan -i JSON) ";
-eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simple) ";
-## test ##
+eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpan -i Encode), ";
+eval "use JSON;1" or $missingModulEPG .= "JSON (cpan -i JSON), ";
+eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simple), ";
+## variant for OS Windows ??? ##
 #eval "use IO::Compress::Gzip;1" or $missingModulEPG .= "IO::Compress:Gzip (cpan -i IO::Compress:Gzip) ";
 #eval "use IO::Compress::Xz;1" or $missingModulEPG .= "IO::Compress:Xz (cpan -i IO::Compress:Xz) ";
+eval "use Gzip;1" or $missingModulEPG .= "Gzip (apt-get install Gzip), ";
+eval "use Xz;1" or $missingModulEPG .= "xz-utils (apt-get install xz-utils) ";
 
 my @channel_available;
 my $HTML = {};
@@ -63,6 +65,7 @@ sub EPG_Define($$) {
 	my ($autocreateFilelog, $autocreateHash, $autocreateName, $autocreateDeviceRoom, $autocreateWeblinkRoom) = ('%L' . $name . '-%Y-%m.log', undef, 'autocreate', $typ, $typ);
 	my ($cmd, $ret);
 
+	return "ERROR: you need ".$missingModulEPG."package to use this module" if ($missingModulEPG ne "");
 	return "Usage: define <name> $name"  if(@arg != 2);
 
 	if ($init_done) {
@@ -128,7 +131,6 @@ sub EPG_Get($$$@) {
 		"DownloadURL - http://rytecepg.epgspot.com/epg_data/\n".
 		"DownloadFile - rytecAT_Basic.xz\n".
 		"\nnote: The two attributes must be entered separately!" if (!$DownloadURL || !$DownloadFile);
-		return "ERROR: you need ".$missingModulEPG."package to use this command!" if ($missingModulEPG ne "");
 		## check directory and create ##
 		if (! -d "FHEM/EPG") {
 			my $ok = mkdir("FHEM/EPG");
@@ -524,11 +526,11 @@ sub EPG_ParseHttpResponse($$$) {
 		if ($DownloadFile =~ /.*\.gz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz";
 			my $ok = qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);         # Datei Unpack gz
-			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";
+			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok" if ($ok ne "");
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz";
 			my $ok = qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);             # Datei Unpack xz
-			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";
+			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok" if ($ok ne "");
 		}
 
 		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
@@ -626,7 +628,7 @@ sub EPG_nonBlock_available_channels($) {
 	my $Variant = "unknown";
 	my $ch_id;
 	my $ok = "ok";
-	my $additive_info;
+	my $additive_info = "";
 
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
@@ -667,13 +669,15 @@ sub EPG_nonBlock_available_channels($) {
 		close FileCheck;
 		
 		if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{programm});		
+			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{programm});
+			Log3 $name, 4, "$name: nonBlocking_available_channels read additive_info with variant $Variant";
 		} elsif ($Variant eq "teXXas_RSS") {
 			$additive_info = $hash->{helper}{programm};	
 		}
 	} else {
 		$Variant = "not detectable";
-		$ok = "error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
+		$ok = "error, file $EPG_file_name no found at ./FHEM/EPG";
+		Log3 $name, 4, "$name: nonBlocking_available_channels variant $Variant need help!";
 	}
 
 	### for TEST ###
