@@ -524,14 +524,25 @@ sub EPG_ParseHttpResponse($$$) {
 		close $file;
 
 		local $SIG{CHLD} = 'DEFAULT';
+		my $osname = $^O;
+
 		if ($DownloadFile =~ /.*\.gz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz";
 			my $ok = qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);         # Datei Unpack gz
-			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok" if ($ok ne "");
+			if ($ok ne "") {
+				Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";				
+				Log3 $name, 4, "$name: ParseHttpResponse - osname = $osname";
+			}
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz";
 			my $ok = qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);             # Datei Unpack xz
-			Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok" if ($ok ne "");
+			if ($ok ne "") {
+				Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";				
+				Log3 $name, 4, "$name: ParseHttpResponse - osname = $osname";
+				if ($osname eq "MSWin32") {
+					return "development";
+				}
+			}
 		}
 
 		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
@@ -597,7 +608,7 @@ sub EPG_File_check {
 	opendir(DIR,"./FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
 		while( my $directory_value = readdir DIR ){
 			Log3 $name, 5, "$name: File_check - look for file -> $directory_value";
-			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value =~ /\.(gz|xz)/) {
+			if (index($DownloadFile,$directory_value) >= 0 && $directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
 				Log3 $name, 4, "$name: File_check found $directory_value";
 				$DownloadFile = $directory_value;
 				$DownloadFile_found++;
@@ -608,7 +619,7 @@ sub EPG_File_check {
 	if ($DownloadFile_found != 0) {
 		Log3 $name, 4, "$name: File_check ready to search properties";	
 		my @stat_DownloadFile = stat("./FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
-		$FileAge = FmtDateTime($stat_DownloadFile[9]);                      # letzte Änderungszeit
+		$FileAge = FmtDateTime($stat_DownloadFile[9]);              # letzte Änderungszeit
 	} else {
 		Log3 $name, 4, "$name: File_check nothing found";
 		$DownloadFile = "file not found";
