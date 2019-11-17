@@ -223,7 +223,7 @@ sub EPG_Attr() {
 		
 		if ($attrName eq "HTTP_TimeOut") {
 			return "to small (standard 10)" if ($attrValue < 5);
-			return "to long (standard 10)" if ($attrValue > 60);
+			return "to long (standard 10)" if ($attrValue > 90);
 		}
 	
 	}
@@ -1217,7 +1217,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
-	Maximum time for the download. (default 10 | maximum 59)</li><a name=" "></a></ul><br>
+	Maximum time in seconds for the download. (default 10 | maximum 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
 	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul><br>
 	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
@@ -1304,7 +1304,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
-	Maximale Zeit für den Download. (Standard 10 | maximal 59)</li><a name=" "></a></ul><br>
+	Maximale Zeit in Sekunden für den Download. (Standard 10 | maximal 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
 	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul><br>
 	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
