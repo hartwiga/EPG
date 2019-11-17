@@ -1198,6 +1198,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 		<li>loadEPG_Prime: let the EPG data of the selected channels be at PrimeTime 20:15</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: let the EPG data of the selected channels be from the current day</li><a name=""></a>
+		<li>loadFile: load the file with the information</li><a name=""></a>
 	</ul>
 <br><br>
 
@@ -1284,6 +1285,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 		<li>loadEPG_Prime: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
+		<li>loadFile: l&auml;d die Datei mit den Informationen herunter</li><a name=""></a>
 	</ul>
 <br><br>
 
