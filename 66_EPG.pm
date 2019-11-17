@@ -659,7 +659,7 @@ sub EPG_nonBlock_available_channels($) {
 				# <tv source-data-url="http://api.tvprofil.net/" source-info-name="TvProfil API v1.7 - XMLTV" source-info-url="https://tvprofil.com">
 				$Variant = "TvProfil_XMLTV" if ($_ =~ /.*source-info-name="TvProfil.*/);
 				# <tv generator-info-name="WebGrab+Plus/w MDB &amp; REX Postprocess -- version V2.1.5 -- Jan van Straaten" generator-info-url="http://www.webgrabplus.com">
-				$Variant = "WebGrab+Plus" if ($_ =~ /.*generator-info-name="WebGrab+Plus.*/);
+				$Variant = "WebGrab+Plus" if ($_ =~ /.*generator-info-name="WebGrab\+Plus.*/);
 				#XMLTV.se       <tv generator-info-name="Vind 2.52.12" generator-info-url="https://xmltv.se">
 				$Variant = "XMLTV.se" if ($_ =~ /.*generator-info-url="https:\/\/xmltv.se.*/);
 				#teXXas via RSS  <channel><title>teXXas - 
@@ -748,7 +748,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 	$hash->{helper}{programm} = $ch_table;
 	CommandAttr($hash,"$name Variant $Variant") if ($Variant ne "unknown");
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,available_channels loaded");
+	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,available_channels loaded! Continue on Control panel.");
 }
 
 #####################
