@@ -524,11 +524,19 @@ sub EPG_ParseHttpResponse($$$) {
 		if ($DownloadFile =~ /.*\.gz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz on $osname";
 			($AnyInflateError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
-			return $AnyInflateError if ($AnyInflateError);
+			if ($AnyInflateError) {
+				Log3 $name, 3, "$name: EPG_UnCompress_gz unpack of $DownloadFile failed $AnyInflateError";
+				readingsSingleUpdate($hash, "state", "UnCompress_gz failed", 1);
+				return $AnyInflateError
+			};
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz on $osname";
 			($UnXzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
-			return $UnXzError if ($UnXzError);
+			if ($UnXzError) {
+				Log3 $name, 2, "$name: EPG_UnCompress_xz unpack of $DownloadFile failed $UnXzError";
+				readingsSingleUpdate($hash, "state", "UnCompress_xz failed", 1);
+				return $UnXzError;
+			}
 		}
 
 		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
@@ -555,13 +563,9 @@ sub EPG_UnCompress_gz($$) {
 	$outfile = "./FHEM/EPG/".$outfile;
 
 	my $stat = anyinflate $input => $outfile;
-	Log3 $name, 4, "$name: EPG_UnCompress_gz file $file , state=$stat";
+	Log3 $name, 4, "$name: EPG_UnCompress_gz file $file , state=$stat" if ($stat);
 	
-	if($AnyInflateError) {
-		Log3 $name, 2, "$name: EPG_UnCompress_gz unpack of $input failed $AnyInflateError";
-		return ($AnyInflateError,$input);
-  }
-
+	return ($AnyInflateError,$input) if($AnyInflateError);
 	return (undef,$outfile);
 }
 
@@ -575,13 +579,9 @@ sub EPG_UnCompress_xz($$) {
 	$outfile = "./FHEM/EPG/".$outfile;
 
 	my $stat = unxz $input => $outfile;
-	Log3 $name, 4, "$name: EPG_UnCompress_xz file $file , state=$stat";
+	Log3 $name, 4, "$name: EPG_UnCompress_xz file $file , state=$stat" if ($stat);
 	
-	if($UnXzError) {
-		Log3 $name, 2, "$name: EPG_UnCompress_xz unpack of $input failed $UnXzError";
-		return ($UnXzError,$input);
-  }
-
+	return ($UnXzError,$input) if($UnXzError);
 	return (undef,$outfile);
 }
 
