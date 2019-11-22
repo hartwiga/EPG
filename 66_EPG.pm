@@ -569,10 +569,10 @@ sub EPG_UnCompress_gz($$) {
 sub EPG_UnCompress_xz($$) {
 	my ($hash,$file) = @_;
 	my $name = $hash->{NAME};
-	my $input = "/opt/fhem/FHEM/EPG/".$file;
+	my $input = "/FHEM/EPG/".$file;
 	my $outfile = $file;
   $outfile =~ s/\.xz//;
-	$outfile = "/opt/fhem/FHEM/EPG/".$outfile;
+	$outfile = "/FHEM/EPG/".$outfile;
 
 	my $stat = unxz $input => $outfile;
 	Log3 $name, 4, "$name: EPG_UnCompress_xz file $file , state=$stat";
