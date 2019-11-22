@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-15 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-22 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -29,12 +29,9 @@ my $missingModulEPG = "";
 eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpan -i Encode), ";
 eval "use JSON;1" or $missingModulEPG .= "JSON (cpan -i JSON), ";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simple), ";
-## variant for OS Windows ??? ##
-#eval "use IO::Compress::Gzip;1" or $missingModulEPG .= "IO::Compress:Gzip (cpan -i IO::Compress:Gzip) ";
-#eval "use IO::Compress::Xz;1" or $missingModulEPG .= "IO::Compress:Xz (cpan -i IO::Compress:Xz) ";
 
-#eval "use Gzip;1" or $missingModulEPG .= "Gzip (apt-get install Gzip), ";
-#eval "use Xz;1" or $missingModulEPG .= "xz-utils (apt-get install xz-utils) ";
+use IO::Uncompress::AnyInflate qw(anyinflate $AnyInflateError);
+use IO::Uncompress::UnXz qw(unxz $UnXzError);
 
 my @channel_available;
 my $HTML = {};
@@ -145,7 +142,6 @@ sub EPG_Get($$$@) {
 
 	if ($cmd eq "loadFile") {
 		EPG_PerformHttpRequest($hash);
-		Log3 $name, 4, "$name: get $cmd successful";
 		return undef;
 	}
 
@@ -340,10 +336,9 @@ sub EPG_FW_Detail($@) {
 		</script>';
 
 		### HTML ###
+		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (defined $HTML->{$channel_available[0]}{EPG});
 
-		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (scalar keys %{$HTML});
-
-		if (scalar keys %{$HTML}) {
+		if (defined $HTML->{$channel_available[0]}{EPG}) {
 			my $start = "";
 			my $end = "";
 			my $title = "";
@@ -473,6 +468,7 @@ sub EPG_FW_set_Attr_Channels {
 				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
+		readingsSingleUpdate($hash, "state" , "EPG available with get loadEPG command", 1);
 	}
 	#Log3 $name, 5, "$name: FW_set_Attr_Channels ".Dumper\$HTML;
 }
@@ -523,37 +519,21 @@ sub EPG_ParseHttpResponse($$$) {
 			print $file $data;
 		close $file;
 
-		local $SIG{CHLD} = 'DEFAULT';
 		my $osname = $^O;
 
 		if ($DownloadFile =~ /.*\.gz$/) {
-			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz";
-			my $ok = qx(gzip -d -f /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);         # Datei Unpack gz
-			if ($ok ne "") {
-				Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";				
-				Log3 $name, 4, "$name: ParseHttpResponse - osname = $osname";
-			}
+			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz on $osname";
+			($AnyInflateError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
+			return $AnyInflateError if ($AnyInflateError);
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
-			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz";
-			my $ok = qx(xz -df /opt/fhem/FHEM/EPG/$DownloadFile 2>&1);             # Datei Unpack xz
-			if ($ok ne "") {
-				Log3 $name, 4, "$name: ParseHttpResponse - ERROR: $ok";				
-				Log3 $name, 4, "$name: ParseHttpResponse - osname = $osname";
-				if ($osname eq "MSWin32") {
-					Log3 $name, 4, "$name: ParseHttpResponse need MSWin32 Variant";
-				}
-			}
+			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz on $osname";
+			($UnXzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
+			return $UnXzError if ($UnXzError);
 		}
 
-		if ($? != 0 && $DownloadFile =~ /\.(gz|xz)/) {
-			Log3 $name, 3, "$name: ParseHttpResponse - ERROR ".($? & 255)." and STOP";
-			$state = "ERROR: unpack $DownloadFile";
-		} else {
-			FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
-			$state = "information received";
-			EPG_File_check($hash);
-		}
-
+		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+		$state = "information received";
+		EPG_File_check($hash);
 		$HttpResponse = "downloaded";
 	}
 
@@ -563,6 +543,46 @@ sub EPG_ParseHttpResponse($$$) {
 	readingsEndUpdate($hash, 1);
 
 	HttpUtils_Close($http_param);
+}
+
+#####################
+sub EPG_UnCompress_gz($$) {
+	my ($hash,$file) = @_;
+	my $name = $hash->{NAME};
+	my $input = "/opt/fhem/FHEM/EPG/".$file;
+	my $outfile = $file;
+  $outfile =~ s/\.gz//;
+	$outfile = "/opt/fhem/FHEM/EPG/".$outfile;
+
+	my $stat = anyinflate $input => $outfile;
+	Log3 $name, 4, "$name: EPG_UnCompress_gz file $file , state=$stat";
+	
+	if($AnyInflateError) {
+		Log3 $name, 2, "$name: EPG_UnCompress_gz unpack of $input failed $AnyInflateError";
+		return ($AnyInflateError,$input);
+  }
+
+	return (undef,$outfile);
+}
+
+#####################
+sub EPG_UnCompress_xz($$) {
+	my ($hash,$file) = @_;
+	my $name = $hash->{NAME};
+	my $input = "/opt/fhem/FHEM/EPG/".$file;
+	my $outfile = $file;
+  $outfile =~ s/\.xz//;
+	$outfile = "/opt/fhem/FHEM/EPG/".$outfile;
+
+	my $stat = unxz $input => $outfile;
+	Log3 $name, 4, "$name: EPG_UnCompress_xz file $file , state=$stat";
+	
+	if($UnXzError) {
+		Log3 $name, 2, "$name: EPG_UnCompress_xz unpack of $input failed $UnXzError";
+		return ($UnXzError,$input);
+  }
+
+	return (undef,$outfile);
 }
 
 #####################
@@ -602,29 +622,35 @@ sub EPG_File_check {
 	my $DownloadFile_found = 0;
 	my $FileAge = "unknown";
 
-	Log3 $name, 4, "$name: File_check is running";
-
 	## check files ##
 	opendir(DIR,"./FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
 		while( my $directory_value = readdir DIR ){
-			Log3 $name, 5, "$name: File_check - look for file -> $directory_value";
-			if (index($DownloadFile,$directory_value) >= 0 ) {
-				Log3 $name, 4, "$name: File_check found index $directory_value in $DownloadFile";
-				if ($directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
-					Log3 $name, 4, "$name: File_check found $directory_value";
-					$DownloadFile = $directory_value;
-					$DownloadFile_found++;
+			if ($directory_value ne "." && $directory_value ne "..") {
+				Log3 $name, 5, "$name: File_check - look for file -> $directory_value";
+				if (index($DownloadFile,$directory_value) >= 0 ) {
+					Log3 $name, 5, "$name: File_check found index $directory_value in $DownloadFile";
+					if ($directory_value ne "." && $directory_value ne ".." && $directory_value !~ /\.(gz|xz)/) {
+						Log3 $name, 4, "$name: File_check found $directory_value";
+						$DownloadFile = $directory_value;
+						$DownloadFile_found++;
+						last;
+					}
 				}
 			}
 		}
 	close DIR;
 
 	if ($DownloadFile_found != 0) {
-		Log3 $name, 4, "$name: File_check ready to search properties";	
+		Log3 $name, 4, "$name: File_check ready to search properties on $DownloadFile";	
 		my @stat_DownloadFile = stat("./FHEM/EPG/".$DownloadFile);  # Dateieigenschaften
 		$FileAge = FmtDateTime($stat_DownloadFile[9]);              # letzte Änderungszeit
+
+		Log3 $name, 5, "$name: File_check ready - file rights: ".substr((sprintf "%#o", $stat_DownloadFile[2]),1);
+		Log3 $name, 5, "$name: File_check ready - file owner-ID numbre: ".$stat_DownloadFile[4];
+		Log3 $name, 5, "$name: File_check ready - file group-ID numbre: ".$stat_DownloadFile[5];
+		Log3 $name, 5, "$name: File_check ready - file size: ".$stat_DownloadFile[7]." byte";
 	} else {
-		Log3 $name, 4, "$name: File_check nothing found";
+		Log3 $name, 5, "$name: File_check nothing file found";
 		$DownloadFile = "file not found";
 	}
 
@@ -653,7 +679,11 @@ sub EPG_nonBlock_available_channels($) {
 			my $line_cnt = 0;
 			while (<FileCheck>) {
 				$line_cnt++;
-				Log3 $name, 4, "$name: nonBlocking_available_channels line: $_" if ($line_cnt > 0 && $line_cnt <= 3);
+				if ($line_cnt > 0 && $line_cnt <= 3) {
+					my $line = $_;
+					chomp ($line);
+					Log3 $name, 4, "$name: nonBlocking_available_channels line: ".$line;
+				}
 				# <tv generator-info-name="Rytec" generator-info-url="http://forums.openpli.org">
 				$Variant = "Rytec" if ($_ =~ /.*generator-info-name="Rytec".*/);
 				# <tv source-data-url="http://api.tvprofil.net/" source-info-name="TvProfil API v1.7 - XMLTV" source-info-url="https://tvprofil.com">
@@ -748,7 +778,12 @@ sub EPG_nonBlock_available_channelsDone($) {
 	$hash->{helper}{programm} = $ch_table;
 	CommandAttr($hash,"$name Variant $Variant") if ($Variant ne "unknown");
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,available_channels loaded! Continue on Control panel.");
+	
+	if (AttrVal($name, "Ch_select", undef)) {
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,EPG available with get loadEPG command!");
+	} else {
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,available_channels loaded! Please select channel on Control panel.");
+	}
 }
 
 #####################
