@@ -526,7 +526,7 @@ sub EPG_ParseHttpResponse($$$) {
 			($gzError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
 			if ($gzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($gzError)";
-				readingsSingleUpdate($hash, "state", "UnCompress_gz failed", 1);
+				readingsSingleUpdate($hash, "state", "ERROR: unpack failed ($gzError)", 1);
 				return $gzError
 			};
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
@@ -534,7 +534,7 @@ sub EPG_ParseHttpResponse($$$) {
 			($xzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
 			if ($xzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($xzError)";
-				readingsSingleUpdate($hash, "state", "UnCompress_xz failed", 1);
+				readingsSingleUpdate($hash, "state", "ERROR: unpack xz failed ($gzError)", 1);
 				return $xzError;
 			}
 		}
@@ -574,7 +574,7 @@ sub EPG_UnCompress_gz($$) {
 			return ("missing $tools[0] package",$input);
 		}
 	} else {
-		return ("please unpack manually (example 7Zip)",$input);
+		return ("please unpack manually [example 7Zip]",$input);
 	}
 
 	local $SIG{CHLD} = 'DEFAULT';
@@ -612,7 +612,7 @@ sub EPG_UnCompress_xz($$) {
 			return ("missing $tools[0] (xz-utils) package",$input);
 		}
 	} else {
-		return ("please unpack manually (example 7Zip)",$input);
+		return ("please unpack manually! [example 7Zip]",$input);
 	}
 
 	local $SIG{CHLD} = 'DEFAULT';
@@ -658,7 +658,6 @@ sub EPG_Undef($$) {
 sub EPG_File_check {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
-	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $DownloadFile = AttrVal($name, "DownloadFile", "no file found");
 	my $DownloadFile_found = 0;
 	my $FileAge = "unknown";
