@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-22 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-23 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -26,13 +26,15 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 my $missingModulEPG = "";
-eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode (cpan -i Encode), ";
-eval "use JSON;1" or $missingModulEPG .= "JSON (cpan -i JSON), ";
-eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple (cpan -i XML::Simple), ";
+my $osname = $^O;
+my $gzError;
+my $xzError;
 
-use IO::Uncompress::AnyInflate qw(anyinflate $AnyInflateError);
-use IO::Uncompress::UnXz qw(unxz $UnXzError);
+eval "use Encode qw(encode encode_utf8 decode_utf8);1" or $missingModulEPG .= "Encode || libencode-perl, ";
+eval "use JSON;1" or $missingModulEPG .= "JSON || libjson-perl, ";
+eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple || libxml-simple-perl, ";
 
+my @tools = ("gzip","xz");
 my @channel_available;
 my $HTML = {};
 
@@ -481,7 +483,7 @@ sub EPG_PerformHttpRequest($) {
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
 
-	Log3 $name, 4, "$name: EPG_PerformHttpRequest is running";
+	Log3 $name, 4, "$name: PerformHttpRequest is running";
 	my $http_param = { 	url        => $DownloadURL.$DownloadFile,
 											timeout    => $HTTP_TimeOut,
 											hash       => $hash,                                     # Muss gesetzt werden, damit die Callback funktion wieder $hash hat
@@ -519,23 +521,21 @@ sub EPG_ParseHttpResponse($$$) {
 			print $file $data;
 		close $file;
 
-		my $osname = $^O;
-
 		if ($DownloadFile =~ /.*\.gz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz on $osname";
-			($AnyInflateError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
-			if ($AnyInflateError) {
-				Log3 $name, 3, "$name: EPG_UnCompress_gz unpack of $DownloadFile failed $AnyInflateError";
+			($gzError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
+			if ($gzError) {
+				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($gzError)";
 				readingsSingleUpdate($hash, "state", "UnCompress_gz failed", 1);
-				return $AnyInflateError
+				return $gzError
 			};
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz on $osname";
-			($UnXzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
-			if ($UnXzError) {
-				Log3 $name, 2, "$name: EPG_UnCompress_xz unpack of $DownloadFile failed $UnXzError";
+			($xzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
+			if ($xzError) {
+				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($xzError)";
 				readingsSingleUpdate($hash, "state", "UnCompress_xz failed", 1);
-				return $UnXzError;
+				return $xzError;
 			}
 		}
 
@@ -558,15 +558,34 @@ sub EPG_UnCompress_gz($$) {
 	my ($hash,$file) = @_;
 	my $name = $hash->{NAME};
 	my $input = "./FHEM/EPG/".$file;
-	my $outfile = $file;
-  $outfile =~ s/\.gz//;
-	$outfile = "./FHEM/EPG/".$outfile;
+	my $gzipfound = 0;
 
-	my $stat = anyinflate $input => $outfile;
-	Log3 $name, 4, "$name: EPG_UnCompress_gz file $file , state=$stat" if ($stat);
-	
-	return ($AnyInflateError,$input) if($AnyInflateError);
-	return (undef,$outfile);
+	if ($^O ne 'MSWin32') {
+		## gzip -> gzip ##
+		if (-d "/bin") {
+			if ( -f "/bin/$tools[0]" && -x _ ) {
+				$gzipfound++;
+				Log3 $name, 4, "$name: UnCompress_gz - found $tools[0] on /bin";
+			}
+		}
+		
+		if ($gzipfound == 0) {
+			Log3 $name, 4, "$name: UnCompress_gz - no found $tools[0]";
+			return ("missing $tools[0] package",$input);
+		}
+	} else {
+		return ("please unpack manually (example 7Zip)",$input);
+	}
+
+	local $SIG{CHLD} = 'DEFAULT';
+	my $ok = qx(gzip -d -f $input 2>&1);             # Datei Unpack gz
+
+	if ($ok ne "" || $? != 0) {
+		Log3 $name, 4, "$name: UnCompress_gz - ERROR: $ok $?";				
+		return ("$ok $?",$input);
+	}
+
+	return (undef,$input);
 }
 
 #####################
@@ -574,15 +593,37 @@ sub EPG_UnCompress_xz($$) {
 	my ($hash,$file) = @_;
 	my $name = $hash->{NAME};
 	my $input = "./FHEM/EPG/".$file;
-	my $outfile = $file;
-  $outfile =~ s/\.xz//;
-	$outfile = "./FHEM/EPG/".$outfile;
+	my $path_separator = ':';
+	my $xzfound = 0;
 
-	my $stat = unxz $input => $outfile;
-	Log3 $name, 4, "$name: EPG_UnCompress_xz file $file , state=$stat" if ($stat);
-	
-	return ($UnXzError,$input) if($UnXzError);
-	return (undef,$outfile);
+	if ($^O ne 'MSWin32') {
+		## xz -> xz-utils ##
+		for my $path ( split /$path_separator/, $ENV{PATH} ) {
+			#Log3 $name, 3, "$name: $cmd - \$ENV\{PATH\}: " .$path;
+			if ( -f "$path/$tools[1]" && -x _ ) {
+				$xzfound++;
+				Log3 $name, 3, "$name: UnCompress_xz - found $tools[1] on " .$path;
+				last;
+			}
+		}
+
+		if ($xzfound == 0) {
+			Log3 $name, 4, "$name: UnCompress_xz - no found $tools[1]";
+			return ("missing $tools[0] (xz-utils) package",$input);
+		}
+	} else {
+		return ("please unpack manually (example 7Zip)",$input);
+	}
+
+	local $SIG{CHLD} = 'DEFAULT';
+	my $ok = qx(xz -df $input 2>&1);             # Datei Unpack xz	
+
+	if ($ok ne "" || $? != 0) {
+		Log3 $name, 4, "$name: UnCompress_xz - ERROR: $ok $?";				
+		return ("$ok $?",$input);
+	}
+
+	return (undef,$input);
 }
 
 #####################
@@ -928,8 +969,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name_old      -> $ch_name_old";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | EPG information  -> $data_found (value of array)";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | title            -> $title";
-					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | subtitle         -> $subtitle";
-					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | desc             -> $desc.\n";
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | subtitle         -> $subtitle";
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | desc             -> $desc.\n";
 
 					$hash->{helper}{HTML}{$ch_name}{ch_name} = $ch_name;
 					$hash->{helper}{HTML}{$ch_name}{ch_id} = $ch_id;
@@ -999,11 +1040,11 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 		foreach my $ch (sort keys %{$HTML}) {
 			## Kanäle ##
-			Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done ch          -> $ch";
+			Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
 			# title start end
 			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-				Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done array value -> ".$i;
-				Log3 $name, 3, "$name: EPG_nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+				Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
+				Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
 			}
 			#readingsBulkUpdate($hash, $ch, "development");
 		}
