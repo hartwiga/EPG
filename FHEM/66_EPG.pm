@@ -568,7 +568,7 @@ sub EPG_UnCompress_gz($$) {
 				Log3 $name, 4, "$name: UnCompress_gz - found $tools[0] on /bin";
 			}
 		}
-		
+
 		if ($gzipfound == 0) {
 			Log3 $name, 4, "$name: UnCompress_gz - no found $tools[0]";
 			return ("missing $tools[0] package",$input);
@@ -578,10 +578,10 @@ sub EPG_UnCompress_gz($$) {
 	}
 
 	local $SIG{CHLD} = 'DEFAULT';
-	my $ok = qx(gzip -d -f $input 2>&1);             # Datei Unpack gz
+	my $ok = qx(gzip -d -f $input 2>&1);   # Datei Unpack gz
 
 	if ($ok ne "" || $? != 0) {
-		Log3 $name, 4, "$name: UnCompress_gz - ERROR: $ok $?";				
+		Log3 $name, 4, "$name: UnCompress_gz - ERROR: $ok $?";
 		return ("$ok $?",$input);
 	}
 
@@ -602,7 +602,7 @@ sub EPG_UnCompress_xz($$) {
 			#Log3 $name, 3, "$name: $cmd - \$ENV\{PATH\}: " .$path;
 			if ( -f "$path/$tools[1]" && -x _ ) {
 				$xzfound++;
-				Log3 $name, 3, "$name: UnCompress_xz - found $tools[1] on " .$path;
+				Log3 $name, 4, "$name: UnCompress_xz - found $tools[1] on " .$path;
 				last;
 			}
 		}
@@ -616,10 +616,10 @@ sub EPG_UnCompress_xz($$) {
 	}
 
 	local $SIG{CHLD} = 'DEFAULT';
-	my $ok = qx(xz -df $input 2>&1);             # Datei Unpack xz	
+	my $ok = qx(xz -df $input 2>&1);   # Datei Unpack xz
 
 	if ($ok ne "" || $? != 0) {
-		Log3 $name, 4, "$name: UnCompress_xz - ERROR: $ok $?";				
+		Log3 $name, 4, "$name: UnCompress_xz - ERROR: $ok $?";
 		return ("$ok $?",$input);
 	}
 
