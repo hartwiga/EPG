@@ -1228,6 +1228,14 @@ sub EPG_readingsSingleUpdate_later {
 <ul>
 The EPG module fetches the TV broadcast information from various sources.<br>
 This is a module which retrieves the data for an electronic program guide and displays it immediately. (example: alternative for HTTPMOD + Readingsgroup & other)<br><br>
+<u>The module has dependencies:</u><br>
+<ul>
+<li>Encode</li>
+<li>JSON</li>
+<li>XML::Simple</li>
+<li>gzip</li>
+<li>xz (xz-utils)</li>
+</ul><br>
 <i>Depending on the source and host country, the information can be slightly differentiated.<br> Each variant has its own read-in routine. When new sources become known, the module can be extended at any time.</i>
 <br><br>
 You have to choose a source and only then can the data of the TV Guide be displayed.<br>
@@ -1313,6 +1321,15 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 <ul>
 Das EPG Modul holt die TV - Sendungsinformationen aus verschiedenen Quellen.<br>
 Es handelt sich hiermit um einen Modul welches die Daten f&uuml;r einen elektronischen Programmf&uuml;hrer abruft und sofort darstellt. (Bsp: Alternative f&uuml;r HTTPMOD + Readingsgroup & weitere)<br><br>
+<u>Das Modul besitzt Abh&auml;ngigkeiten:</u><br>
+<ul>
+<li>Encode</li>
+<li>JSON</li>
+<li>XML::Simple</li>
+<li>gzip</li>
+<li>xz (xz-utils)</li>
+</ul><br>
+
 <i>Je nach Quelle und Aufnahmeland k&ouml;nnen die Informationen bei Ihnen geringf&uuml;gig abweichen.<br> Jede Variante besitzt ihre eigene Einleseroutine. Beim bekanntwerden neuer Quellen kann das Modul jederzeit erweitert werden.</i>
 <br><br>
 Sie m&uuml;ssen sich f&uuml;r eine Quelle entscheiden und erst danach k&ouml;nnen Daten des TV-Guides dargestellt werden.<br>
