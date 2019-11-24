@@ -727,7 +727,7 @@ sub EPG_nonBlock_available_channels($) {
 				if ($line_cnt > 0 && $line_cnt <= 3) {
 					my $line = $_;
 					chomp ($line);
-					Log3 $name, 4, "$name: nonBlocking_available_channels line: ".$line;
+					Log3 $name, 5, "$name: nonBlocking_available_channels line: ".$line;
 				}
 				# <tv generator-info-name="Rytec" generator-info-url="http://forums.openpli.org">
 				$Variant = "Rytec" if ($_ =~ /.*generator-info-name="Rytec".*/);
@@ -852,7 +852,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $ch_found = 0;          # counter to verification ch
 	my $ch_id = "";            # TV channel channel id
 	my $ch_name = "";          # TV channel display-name
-	my $ch_name_old = "";      # TV channel display-name before
+	my $ch_name_before = "";   # TV channel display-name before
 	my $data_found;            # counter to verification data
 	my $desc = "";             # TV desc
 	my $end = "";              # TV time end
@@ -917,19 +917,19 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					if (grep /$search($|,)/, $Ch_select) {                                      # find in attributes channel
 						($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $search);
 						if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
 							my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | hour_diff_result $hour_diff";
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | hour_diff_result $hour_diff";
 
 							my @start_new = split("",$start);
 							my @end_new = split("",$end);
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
 
 							if (index($hour_diff,"-")) {
 								$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
@@ -966,12 +966,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                # desc
 				
 				if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
-					$data_found = -1 if ($ch_name_old ne $ch_name);                                        # Reset bei Kanalwechsel
+					$data_found = -1 if ($ch_name_before ne $ch_name);                                        # Reset bei Kanalwechsel
 					$data_found++;
 					Log3 $name, 4, "#################################################";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name          -> $ch_name";
-					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name_old      -> $ch_name_old";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_before        -> $ch_name_before";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | EPG information  -> $data_found (value of array)";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start            -> $start";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end              -> $end";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | title            -> $title";
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | subtitle         -> $subtitle";
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | desc             -> $desc.\n";
@@ -1000,7 +1002,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{desc} = $desc;
 
 					$ch_found = 0;
-					$ch_name_old = $ch_name;
+					$ch_name_before = $ch_name;
 					$ch_name = "";
 					$desc = "";
 					$hour_diff_read = "";
