@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-23 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-24 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -14,7 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - other methode if download slow | nonBlocking
+# - input EPG filtre s/["`;']//g; ???
 #################################################################
 
 package main;
@@ -92,6 +92,8 @@ sub EPG_Define($$) {
 		### Attributes ###
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
+
+	$hash->{VERSION} = "20191124";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -853,9 +855,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
   my $hash = $defs{$name};
   my $return;
 
-  Log3 $name, 4, "$name: nonBlock_loadEPG_v1 running";
+  Log3 $name, 4, "$name: nonBlock_loadEPG_v1 running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1 string=$string";
-	Log3 $name, 4, "$name: nonBlock_loadEPG_v1 with $cmd from file $EPG_file_name";
 
 	my $off_h = 0;
 	my @gmt = (gmtime(time+$off_h*60*60));
@@ -1034,26 +1035,27 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
 
-	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$json_HTML;
+	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
 }
 
 #####################
 sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
-	my ($name, $EPG_file_name, $EPG_info, $json_HTML) = split("\\|", $string);
+	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 
-  Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running";
+  Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
+
 	delete($hash->{helper}{RUNNING_PID});
 
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = decode_json($json_HTML);
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
 
-	if ($Ch_Info_to_Reading eq "yes") {
+	if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
 		## create Readings ##
 		readingsBeginUpdate($hash);
 
@@ -1088,9 +1090,8 @@ sub EPG_nonBlock_loadEPG_v2($) {
   my $hash = $defs{$name};
   my $return;
 
-  Log3 $name, 4, "$name: nonBlock_loadEPG_v2 running";
+  Log3 $name, 4, "$name: nonBlock_loadEPG_v2 running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2 string=$string";
-	Log3 $name, 4, "$name: nonBlock_loadEPG_v2 with $cmd from file $EPG_file_name";
 
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my @Ch_sort_array = split(",",$Ch_sort) if ($Ch_sort);
@@ -1184,24 +1185,46 @@ sub EPG_nonBlock_loadEPG_v2($) {
 
 	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
 
-	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$json_HTML;
+	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
 }
 
 #####################
 sub EPG_nonBlock_loadEPG_v2Done($) {
 	my ($string) = @_;
-	my ($name, $EPG_file_name, $EPG_info, $json_HTML) = split("\\|", $string);
+	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 
-  Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running";
+	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
 	delete($hash->{helper}{RUNNING_PID});
 	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = decode_json($json_HTML);
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
+	
+	# if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
+		# ## create Readings ##
+		# readingsBeginUpdate($hash);
+
+		# foreach my $ch (sort keys %{$HTML}) {
+			# ## Kanäle ##
+			# Log3 $name, 4, "#################################################";
+			# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
+			# # start end title
+			# for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+
+				# readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
+			# }
+		# }
+
+		# readingsEndUpdate($hash, 1);
+	# }
 	
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
@@ -1262,8 +1285,8 @@ The EPG module fetches the TV broadcast information from various sources.<br>
 This is a module which retrieves the data for an electronic program guide and displays it immediately. (example: alternative for HTTPMOD + Readingsgroup & other)<br><br>
 <u>The module has dependencies:</u><br>
 <ul>
-<li>Encode</li>
-<li>JSON</li>
+<li>Encode (encode encode_utf8 decode_utf8)</li>
+<li>JSON (encode decode_json)</li>
 <li>XML::Simple</li>
 <li>gzip</li>
 <li>xz (xz-utils)</li>
@@ -1357,8 +1380,8 @@ Das EPG Modul holt die TV - Sendungsinformationen aus verschiedenen Quellen.<br>
 Es handelt sich hiermit um einen Modul welches die Daten f&uuml;r einen elektronischen Programmf&uuml;hrer abruft und sofort darstellt. (Bsp: Alternative f&uuml;r HTTPMOD + Readingsgroup & weitere)<br><br>
 <u>Das Modul besitzt Abh&auml;ngigkeiten:</u><br>
 <ul>
-<li>Encode</li>
-<li>JSON</li>
+<li>Encode (encode encode_utf8 decode_utf8)</li>
+<li>JSON (encode decode_json)</li>
 <li>XML::Simple</li>
 <li>gzip</li>
 <li>xz (xz-utils)</li>
