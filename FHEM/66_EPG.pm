@@ -124,7 +124,7 @@ sub EPG_Get($$$@) {
 	$cmd2 = "" if (!$cmd2);
 
 	my $getlist = "loadFile:noArg ";
-	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && ReadingsVal($name, "HttpResponse", undef) eq "downloaded");
+	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && ReadingsVal($name, "HttpResponse", undef) eq "downloaded" && ReadingsVal($name, "EPG_file_name", undef) ne "file not found");
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -148,6 +148,8 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "available_channels") {
+		Log3 $name, 4, "$name: get $cmd - starting File_check";
+		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		@channel_available = ();
@@ -521,9 +523,11 @@ sub EPG_ParseHttpResponse($$$) {
 			print $file $data;
 		close $file;
 
+		Log3 $name, 4, "$name: ParseHttpResponse - returned ".length($data)." bytes Data";
+
 		if ($DownloadFile =~ /.*\.gz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode gz on $osname";
-			($gzError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile); # Datei Unpack gz
+			($gzError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile);    # Datei Unpack gz
 			if ($gzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($gzError)";
 				readingsSingleUpdate($hash, "state", "ERROR: unpack failed ($gzError)", 1);
@@ -531,7 +535,7 @@ sub EPG_ParseHttpResponse($$$) {
 			};
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
 			Log3 $name, 4, "$name: ParseHttpResponse - unpack methode xz on $osname";
-			($xzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);       # Datei Unpack xz
+			($xzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);    # Datei Unpack xz
 			if ($xzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($xzError)";
 				readingsSingleUpdate($hash, "state", "ERROR: unpack xz failed ($gzError)", 1);
@@ -539,9 +543,9 @@ sub EPG_ParseHttpResponse($$$) {
 			}
 		}
 
+		EPG_File_check($hash) if ($osname ne "MSWin32");
 		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 		$state = "information received";
-		EPG_File_check($hash);
 		$HttpResponse = "downloaded";
 	}
 
@@ -639,6 +643,7 @@ sub EPG_Notify($$) {
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
+		EPG_File_check($hash);
 	}
 
 	return undef;
