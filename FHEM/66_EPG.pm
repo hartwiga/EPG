@@ -42,16 +42,19 @@ my $HTML = {};
 sub EPG_Initialize($) {
 	my ($hash) = @_;
 
-	$hash->{DefFn}                 = "EPG_Define";
-	$hash->{SetFn}                 = "EPG_Set";
-	$hash->{GetFn}                 = "EPG_Get";
 	$hash->{AttrFn}                = "EPG_Attr";
+	$hash->{DefFn}                 = "EPG_Define";
+	$hash->{GetFn}                 = "EPG_Get";
 	$hash->{NotifyFn}              = "EPG_Notify";
-  $hash->{FW_detailFn}           = "EPG_FW_Detail";
+	$hash->{SetFn}                 = "EPG_Set";
 	$hash->{UndefFn}               = "EPG_Undef";
+  $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Icon:textField-long Ch_Info_to_Reading:yes,no DownloadFile DownloadURL HTTP_TimeOut Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS View_Subtitle:no,yes disable";
+	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no ".
+                                    "DownloadFile DownloadURL HTTP_TimeOut ".
+                                    "Table:on,off Table_view_Subtitle:no,yes disable ".
+                                    "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
 												             #$readingFnAttributes;
 }
 
@@ -216,6 +219,10 @@ sub EPG_Attr() {
 	my $typ = $hash->{TYPE};
 
 	if ($cmd eq "set" && $init_done == 1 ) {
+		if ($attrName eq "Ch_Info_to_Reading" && $attrValue eq "no") {
+			EPG_readingsDeleteChannel($hash);
+		}
+
 		if ($attrName eq "DownloadURL") {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
@@ -233,6 +240,9 @@ sub EPG_Attr() {
 			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
 			return undef;
 		}
+		if ($attrName eq "Ch_Info_to_Reading") {
+			EPG_readingsDeleteChannel($hash);
+		}
 	}
 }
 
@@ -241,11 +251,12 @@ sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
-	my $View_Subtitle = "";
+	my $Table = AttrVal($name, "Table", "on");
+	my $Table_view_Subtitle = "";
 	my $cnt = 0;
 	my $ret = "";
 
-	Log3 $name, 5, "$name: FW_Detail is running";
+	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table)";
 	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
 
 	if ($Ch_select) {
@@ -340,6 +351,8 @@ sub EPG_FW_Detail($@) {
 		</script>';
 
 		### HTML ###
+		return $ret if ($Table eq "off");
+		$ret .= "<div><br></div>" if ($FW_detail eq "");
 		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (defined $HTML->{$channel_available[0]}{EPG});
 
 		if (defined $HTML->{$channel_available[0]}{EPG}) {
@@ -350,9 +363,9 @@ sub EPG_FW_Detail($@) {
 			my $desc = "";
 			my $cnt_infos = 0;
 
-			$View_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
+			$Table_view_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
-			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$View_Subtitle</tr>";
+			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$Table_view_Subtitle</tr>";
 			
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
@@ -375,7 +388,7 @@ sub EPG_FW_Detail($@) {
 					$cnt_infos++;
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
-					$View_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "View_Subtitle", "no") eq "yes");
+					$Table_view_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 
 					if ($desc ne "") {
 						#$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
@@ -386,12 +399,12 @@ sub EPG_FW_Detail($@) {
 						$desc =~ s/[\r\'\"]/ /g;
 						$desc =~ s/[\n]|\\n/<br>/g;
 
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
 						### TEST ###
-						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$View_Subtitle</tr>";
+						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
 						### TEST ###
 					} else {
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$View_Subtitle</tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>";
 					}
 				}
 			}
@@ -1046,13 +1059,17 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 		foreach my $ch (sort keys %{$HTML}) {
 			## Kanäle ##
-			Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
-			# title start end
+			Log3 $name, 4, "#################################################";
+			Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
+			# start end title
 			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-				Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
-				Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+
+				readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
 			}
-			#readingsBulkUpdate($hash, $ch, "development");
 		}
 
 		readingsEndUpdate($hash, 1);
@@ -1210,6 +1227,19 @@ sub EPG_readingsSingleUpdate_later {
 	readingsSingleUpdate($hash, "state", $txt,1);
 }
 
+#####################
+sub EPG_readingsDeleteChannel($) {
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+
+	foreach my $reading (keys %{$hash->{READINGS}}) {
+		if ($reading =~ /^x_.*/) {
+			Log3 $name, 5, "$name: readingsDeleteChannel delete $reading";
+			readingsDelete($hash,$reading);		
+		}
+	}
+}
+
 
 # Eval-Rückgabewert für erfolgreiches
 # Laden des Moduls
@@ -1308,10 +1338,12 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximum time in seconds for the download. (default 10 | maximum 90)</li><a name=" "></a></ul><br>
+	<ul><li><a name="Table">Table</a><br>
+	Displays the EPG data in a predefined table. (on = default | off) </li><a name=" "></a></ul><br>
+	<ul><li><a name="Table_view_Subtitle">Table_view_Subtitle</a><br>
+	Displays additional information of the shipment as far as available.</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
-	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul><br>
-	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
-	Displays additional information of the shipment as far as available.</li><a name=" "></a></ul>
+	Processing variant according to which method the information is processed or read.</li><a name=" "></a></ul>
 
 =end html
 
@@ -1404,10 +1436,12 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximale Zeit in Sekunden für den Download. (Standard 10 | maximal 90)</li><a name=" "></a></ul><br>
+	<ul><li><a name="Table">Table</a><br>
+	Zeigt die EPG-Daten in einer vordefinierten Tabelle an. (on = default | off) </li><a name=" "></a></ul><br>
+	<ul><li><a name="Table_view_Subtitle">Table_view_Subtitle</a><br>
+	Zeigt Zusatzinformation der Sendung an soweit verf&uuml;gbar.</li><a name=" "></a></ul><br>
 	<ul><li><a name="Variant">Variant</a><br>
-	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul><br>
-	<ul><li><a name="View_Subtitle">View_Subtitle</a><br>
-	Zeigt Zusatzinformation der Sendung an soweit verf&uuml;gbar.</li><a name=" "></a></ul>
+	Verarbeitungsvariante, nach welchem Verfahren die Informationen verarbeitet oder gelesen werden.</li><a name=" "></a></ul>
 
 =end html_DE
 
