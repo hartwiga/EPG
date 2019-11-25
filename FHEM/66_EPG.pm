@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-24 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-25 21:17:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -275,7 +275,7 @@ sub EPG_FW_Detail($@) {
 							<tr class='even'>";
 
 			$ret .= "<td><a href='#button1' id='button1'>list of all available channels</a></td>";
-			$ret .= "<td> readed channels:". scalar(@channel_available) ."</td>";
+			$ret .= "<td> read channels:". scalar(@channel_available) ."</td>";
 			$ret .= "<td> selected channels: ". $cnt ."</td>";
 			$ret .= "</tr></table></div>";
 		}
@@ -1012,7 +1012,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					}
 
 					my $mod_cnt;
-					($title, $subtitle, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON($hash, $title, $subtitle, $desc);
+					($title, $subtitle, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v1($hash, $title, $subtitle, $desc);
 
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{start} = $start;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{end} = $end;
@@ -1061,15 +1061,17 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = eval { decode_json( $json_HTML ) };
+
 	if ($@) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
-		open(JSONfailed, '>>', "./FHEM/EPG/decode_json_failed.txt");
-			print JSONfailed FmtDateTime(time())." ERROR message:\n";
-			print JSONfailed $@;
-			print JSONfailed "\n### Input to check on http://jsoneditoronline.org/ ###\n";
-			print JSONfailed $json_HTML . "\n\n";
-		close(JSONfailed);
-		readingsSingleUpdate($hash, "state", "decode_json failed",1);
+
+		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "state", $@);
+		#readingsBulkUpdate($hash, "state", "### Input to check on http://jsoneditoronline.org/ ###");
+		readingsBulkUpdate($hash, "state", "$json_HTML");
+		readingsBulkUpdate($hash, "state", "decode_json failed");
+		readingsEndUpdate($hash, 1);
+
 		return "ERROR";
 	}
 	
@@ -1157,6 +1159,7 @@ sub EPG_nonBlock_loadEPG_v2($) {
 			if($_ =~ /:\s(.*)<\/title>/ && $ch_found != 0) {
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 channel     -> ".$ch_name;
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 title       -> ".$1 ;
+
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{title} = $1;
 
 				### need check
@@ -1188,6 +1191,9 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				$desc = $7;
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 description -> ".$7;
 				Log3 $name, 4, "#################################################";
+
+				#my $mod_cnt;
+				#($title, undef, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v1($hash, $title, undef, $desc);
 
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{start} = $start;
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{end} = $end;
@@ -1282,7 +1288,7 @@ sub EPG_readingsDeleteChannel($) {
 }
 
 #####################
-sub EPG_SyntaxCheck_for_JSON($$$$) {
+sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 	my ($hash, $title, $subtitle, $desc) = @_;
 	my $name = $hash->{NAME};
 	my @values;
@@ -1290,11 +1296,11 @@ sub EPG_SyntaxCheck_for_JSON($$$$) {
 	my $mod_cnt = 0;
 	
 	## http://jsoneditoronline.org/ ##
-	Log3 $name, 5, "$name: EPG_SyntaxCheck_for_JSON is running";
+	Log3 $name, 5, "$name: EPG_SyntaxCheck_for_JSON_v1 is running";
 	
 	push (@values,$title);
-	push (@values,$subtitle);
-	push (@values,$desc);
+	push (@values,$subtitle) if $subtitle;
+	push (@values,$desc) if $desc;
 
 	for(my $i=0;$i<=$#values;$i++) {
 		if ($values[$i]) {
@@ -1328,6 +1334,16 @@ sub EPG_SyntaxCheck_for_JSON($$$$) {
 	return ($title, $subtitle, $desc, $mod_cnt);
 }
 
+#####################
+sub EPG_SyntaxCheck_for_JSON_v2($$$) {
+	my ($hash, $title, $desc) = @_;
+	my $name = $hash->{NAME};
+	my @values;
+	my $error_cnt = 0;
+	my $mod_cnt = 0;
+	
+	return ($title, $desc, $mod_cnt);
+}
 
 # Eval-Rückgabewert für erfolgreiches
 # Laden des Moduls
