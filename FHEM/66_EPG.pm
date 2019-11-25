@@ -93,7 +93,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191124";
+	$hash->{VERSION} = "20191125";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -1067,7 +1067,6 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 		readingsBeginUpdate($hash);
 		readingsBulkUpdate($hash, "state", $@);
-		#readingsBulkUpdate($hash, "state", "### Input to check on http://jsoneditoronline.org/ ###");
 		readingsBulkUpdate($hash, "state", "$json_HTML");
 		readingsBulkUpdate($hash, "state", "decode_json failed");
 		readingsEndUpdate($hash, 1);
@@ -1193,7 +1192,7 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				Log3 $name, 4, "#################################################";
 
 				#my $mod_cnt;
-				#($title, undef, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v1($hash, $title, undef, $desc);
+				#($title, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v2($hash, $title, $desc);
 
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{start} = $start;
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{end} = $end;
@@ -1296,7 +1295,7 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 	my $mod_cnt = 0;
 	
 	## http://jsoneditoronline.org/ ##
-	Log3 $name, 5, "$name: EPG_SyntaxCheck_for_JSON_v1 is running";
+	Log3 $name, 5, "$name: SyntaxCheck_for_JSON_v1 is running";
 	
 	push (@values,$title);
 	push (@values,$subtitle) if $subtitle;
@@ -1307,22 +1306,22 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 			if ($values[$i] =~ /\s\\\s/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON found wrong syntax ".'-> \ <-';
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON orginal: ".$values[$i];
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'-> \ <-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\s\\\s/ /g;
 				$mod_cnt++;
-				Log3 $name, 3, "$name: SyntaxCheck_for_JSON modded: ".$values[$i];
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
 			if ($values[$i] =~ /\\"/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON found wrong syntax ".'->\\"<-';
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON orginal: ".$values[$i];
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\\"<-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\\"//g;
 				$mod_cnt++;
-				Log3 $name, 3, "$name: SyntaxCheck_for_JSON modded: ".$values[$i];
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
 		}
 
@@ -1341,7 +1340,42 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 	my @values;
 	my $error_cnt = 0;
 	my $mod_cnt = 0;
-	
+
+	## http://jsoneditoronline.org/ ##
+	Log3 $name, 5, "$name: SyntaxCheck_for_JSON_v2 is running";
+
+	push (@values,$title);
+	push (@values,$desc) if $desc;
+
+	for(my $i=0;$i<=$#values;$i++) {
+		if ($values[$i]) {
+			if ($values[$i] =~ /\s\\\s/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 found wrong syntax ".'-> \ <-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\s\\\s/ /g;
+				$mod_cnt++;
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 modded: ".$values[$i];
+			}
+			if ($values[$i] =~ /\\"/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 found wrong syntax ".'->\\"<-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\\"//g;
+				$mod_cnt++;
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v2 modded: ".$values[$i];
+			}
+		}
+
+		$title = $values[$i] if($i == 0 && $error_cnt != 0);
+		$desc = $values[$i] if($i == 2 && $error_cnt != 0);
+		$error_cnt = 0;
+	}
+
 	return ($title, $desc, $mod_cnt);
 }
 
