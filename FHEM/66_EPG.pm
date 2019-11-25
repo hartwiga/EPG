@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-25 21:17:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-25 23:55:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -788,14 +788,8 @@ sub EPG_nonBlock_available_channels($) {
 				}
 			}
 		close FileCheck;
-		
-		if (not $ch_id) {
-			Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant NOT found ch_id $ch_id";
-			return;
-		}
 
 		if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-			
 			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{programm});
 			Log3 $name, 4, "$name: nonBlocking_available_channels read additive_info with variant $Variant";
 		} elsif ($Variant eq "teXXas_RSS") {
@@ -824,6 +818,8 @@ sub EPG_nonBlock_available_channelsDone($) {
 	my ($name, $EPG_file_name, $ok, $Variant, $ch_available, $additive_info) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $ch_table = "";
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
 	return unless(defined($string));
   Log3 $name, 4, "$name: nonBlock_available_channelsDone running";
@@ -842,7 +838,22 @@ sub EPG_nonBlock_available_channelsDone($) {
 
   @channel_available = split(';', $ch_available);
 	@channel_available = sort @channel_available;
-	
+
+	## check channels in attr Ch_select available in file (new available channels) ##
+	if ($Ch_select) {
+		for(my $i=0;$i<=$#Ch_select_array;$i++) {
+			if (not grep /$Ch_select_array[$i]/, @channel_available) {
+				my $cnt = 0;
+				my %mod = map { ($_ => 1) }
+							grep { $_ !~ m/^$Ch_select_array[$i](:.+)?$/ }
+							split(",", $Ch_select);
+				$attr{$name}{Ch_select} = join(" ", sort keys %mod);
+				delete $attr{$name}{Ch_select} if( (!keys %mod && defined($attr{$name}{Ch_select})) || (defined($attr{$name}{Ch_select}) && $attr{$name}{Ch_select} eq "") );
+				Log3 $name, 4, "$name: nonBlock_available_channelsDone delete $Ch_select_array[$i] from list Ch_select -> not available";
+			}
+		}
+	}
+
 	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
 		$additive_info = eval {encode_utf8( $additive_info )};
 		$ch_table = decode_json($additive_info);
@@ -1204,7 +1215,8 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 end mod     -> ".$end;
 				$desc = $7;
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 description -> ".$7;
+				$desc = encode_utf8($desc);
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 description -> ".$desc;
 				Log3 $name, 4, "#################################################";
 
 				#my $mod_cnt;
@@ -1241,30 +1253,29 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = decode_json($json_HTML);
-	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
-	
-	# if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
-		# ## create Readings ##
-		# readingsBeginUpdate($hash);
 
-		# foreach my $ch (sort keys %{$HTML}) {
-			# ## Kanäle ##
-			# Log3 $name, 4, "#################################################";
-			# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
-			# # start end title
-			# for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+	#Log3 $name, 3, "$name: nonBlock_loadEPG_v2Done ".Dumper\$HTML;
 
-				# readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
-			# }
-		# }
+	if ($Ch_Info_to_Reading eq "yes" && $cmd =~ /loadEPG_(Prime|now)/) {
+		## create Readings ##
+		readingsBeginUpdate($hash);
 
-		# readingsEndUpdate($hash, 1);
-	# }
-	
+		foreach my $ch (sort keys %{$HTML}) {
+			## Kanäle ##
+			Log3 $name, 4, "#################################################";
+			Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done ch          -> $ch";
+			# start end title
+			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
+				# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+
+				readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
+			}
+		}
+		readingsEndUpdate($hash, 1);
+	}
+
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
 }
