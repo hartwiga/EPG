@@ -356,11 +356,11 @@ sub EPG_FW_Detail($@) {
 		### HTML ###
 		return $ret if ($Table eq "off");
 		$ret .= "<div><br></div>" if ($FW_detail eq "");
-		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (defined $HTML->{$Channels_value[0]}{EPG});
+		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG});
 
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 		
-		if (defined $HTML->{$Channels_value[0]}{EPG}) {
+		if ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG}) {
 			my $start = "";
 			my $end = "";
 			my $title = "";
@@ -661,9 +661,8 @@ sub EPG_Notify($$) {
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
-		EPG_File_check($hash);
+		CommandGet($hash, "$name available_channels");
 	}
-
 	return undef;
 }
 
@@ -733,6 +732,7 @@ sub EPG_nonBlock_available_channels($) {
 	my $ch_id;
 	my $ok = "ok";
 	my $additive_info = "";
+	my $ch_name;
 
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
@@ -759,12 +759,22 @@ sub EPG_nonBlock_available_channels($) {
 				$Variant = "teXXas_RSS" if ($_ =~ /.*<channel><title>teXXas -.*<link>http:\/\/www.texxas.de\/tv\/programm.*/);
 
 				if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);
+					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);        # other
+					$ch_id = $1 if ($_ =~ /\schannel="(.*)"\s?start=/);  # XMLTV.se
+
 					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
 						Log3 $name, 5, "$name: nonBlocking_available_channels id: $ch_id -> display_name: ".$1;
-						## nonBlocking_available_channels set helper ##
-						$hash->{helper}{programm}{$ch_id}{name} = $1;
-						push(@channel_available,$1);
+						$ch_name = $1;
+					}
+
+					$ch_name = $ch_id if ($Variant eq "XMLTV.se");
+					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant and without ch_id. need help!" if (!$ch_name && $line_cnt == 4);
+					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant, ch_id=$ch_id" if ($ch_name && $line_cnt == 4);
+
+					## nonBlocking_available_channels set helper ##
+					if ($ch_name && (not grep /$ch_name/, @channel_available)) {
+						$hash->{helper}{programm}{$ch_id}{name} = $ch_name;
+						push(@channel_available,$ch_name);					
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
 					$hash->{helper}{programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
@@ -779,7 +789,13 @@ sub EPG_nonBlock_available_channels($) {
 			}
 		close FileCheck;
 		
+		if (not $ch_id) {
+			Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant NOT found ch_id $ch_id";
+			return;
+		}
+
 		if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
+			
 			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{programm});
 			Log3 $name, 4, "$name: nonBlocking_available_channels read additive_info with variant $Variant";
 		} elsif ($Variant eq "teXXas_RSS") {
