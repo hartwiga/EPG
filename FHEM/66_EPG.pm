@@ -257,12 +257,13 @@ sub EPG_FW_Detail($@) {
 	my $Table_view_Subtitle = "";
 	my $cnt = 0;
 	my $ret = "";
+	my @Channels_value;
 
 	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table)";
 	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
 
 	if ($Ch_select) {
-		my @Channels_value = split(",", $Ch_select);
+		@Channels_value = split(",", $Ch_select);
 		$cnt = scalar(@Channels_value);
 	}
 
@@ -355,9 +356,11 @@ sub EPG_FW_Detail($@) {
 		### HTML ###
 		return $ret if ($Table eq "off");
 		$ret .= "<div><br></div>" if ($FW_detail eq "");
-		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (defined $HTML->{$channel_available[0]}{EPG});
+		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not (defined $HTML->{$Channels_value[0]}{EPG});
 
-		if (defined $HTML->{$channel_available[0]}{EPG}) {
+		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
+		
+		if (defined $HTML->{$Channels_value[0]}{EPG}) {
 			my $start = "";
 			my $end = "";
 			my $title = "";
@@ -1008,12 +1011,17 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						$hash->{helper}{HTML}{$ch_name}{ch_wish} = 999;
 					}
 
+					my $mod_cnt;
+					($title, $subtitle, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON($hash, $title, $subtitle, $desc);
+
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{start} = $start;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{end} = $end;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{title} = $title;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{desc} = $desc;
+
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 Dumper: ".Dumper\$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found] if ($mod_cnt != 0);
 
 					$ch_found = 0;
 					$ch_name_before = $ch_name;
@@ -1034,7 +1042,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	}
 
 	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
-
+	
 	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
 }
@@ -1052,9 +1060,19 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	delete($hash->{helper}{RUNNING_PID});
 
 	$json_HTML = eval {encode_utf8( $json_HTML )};
-	$HTML = decode_json($json_HTML);
-	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done ".Dumper\$HTML;
-
+	$HTML = eval { decode_json( $json_HTML ) };
+	if ($@) {
+		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
+		open(JSONfailed, '>>', "./FHEM/EPG/decode_json_failed.txt");
+			print JSONfailed FmtDateTime(time())." ERROR message:\n";
+			print JSONfailed $@;
+			print JSONfailed "\n### Input to check on http://jsoneditoronline.org/ ###\n";
+			print JSONfailed $json_HTML . "\n\n";
+		close(JSONfailed);
+		readingsSingleUpdate($hash, "state", "decode_json failed",1);
+		return "ERROR";
+	}
+	
 	if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
 		## create Readings ##
 		readingsBeginUpdate($hash);
@@ -1261,6 +1279,53 @@ sub EPG_readingsDeleteChannel($) {
 			readingsDelete($hash,$reading);		
 		}
 	}
+}
+
+#####################
+sub EPG_SyntaxCheck_for_JSON($$$$) {
+	my ($hash, $title, $subtitle, $desc) = @_;
+	my $name = $hash->{NAME};
+	my @values;
+	my $error_cnt = 0;
+	my $mod_cnt = 0;
+	
+	## http://jsoneditoronline.org/ ##
+	Log3 $name, 5, "$name: EPG_SyntaxCheck_for_JSON is running";
+	
+	push (@values,$title);
+	push (@values,$subtitle);
+	push (@values,$desc);
+
+	for(my $i=0;$i<=$#values;$i++) {
+		if ($values[$i]) {
+			if ($values[$i] =~ /\s\\\s/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON found wrong syntax ".'-> \ <-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\s\\\s/ /g;
+				$mod_cnt++;
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON modded: ".$values[$i];
+			}
+			if ($values[$i] =~ /\\"/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON found wrong syntax ".'->\\"<-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\\"//g;
+				$mod_cnt++;
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON modded: ".$values[$i];
+			}
+		}
+
+		$title = $values[$i] if($i == 0 && $error_cnt != 0);
+		$subtitle = $values[$i] if($i == 1 && $error_cnt != 0);
+		$desc = $values[$i] if($i == 2 && $error_cnt != 0);
+		$error_cnt = 0;
+	}
+	return ($title, $subtitle, $desc, $mod_cnt);
 }
 
 
