@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-25 23:55:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-26 14:25:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -732,7 +732,6 @@ sub EPG_nonBlock_available_channels($) {
 	my $ch_id;
 	my $ok = "ok";
 	my $additive_info = "";
-	my $ch_name;
 
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
@@ -741,6 +740,7 @@ sub EPG_nonBlock_available_channels($) {
 		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
 			my $line_cnt = 0;
 			while (<FileCheck>) {
+				my $ch_name;
 				$line_cnt++;
 				if ($line_cnt > 0 && $line_cnt <= 3) {
 					my $line = $_;
@@ -769,10 +769,11 @@ sub EPG_nonBlock_available_channels($) {
 
 					$ch_name = $ch_id if ($Variant eq "XMLTV.se");
 					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant and without ch_id. need help!" if (!$ch_name && $line_cnt == 4);
-					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant, ch_id=$ch_id" if ($ch_name && $line_cnt == 4);
+					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant" if ($ch_name && $line_cnt == 4);
 
 					## nonBlocking_available_channels set helper ##
-					if ($ch_name && (not grep /$ch_name/, @channel_available)) {
+					if ($ch_name && (not grep /^$ch_name$/, @channel_available)) {
+						Log3 $name, 5, "$name: nonBlocking_available_channels added $ch_name with ch_id $ch_id";
 						$hash->{helper}{programm}{$ch_id}{name} = $ch_name;
 						push(@channel_available,$ch_name);					
 					}
