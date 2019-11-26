@@ -1081,6 +1081,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
   Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
@@ -1104,9 +1106,17 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 	
 	if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
-		## create Readings ##
 		readingsBeginUpdate($hash);
 
+		## delete old  Readings ##
+		foreach my $reading (keys %{$hash->{READINGS}}) {
+			if ($reading =~ /^x_.*/ && (not grep /^$reading$/, @Ch_select_array)) {
+				Log3 $name, 5, "$name: readingsDeleteChannel delete $reading";
+				readingsDelete($hash,$reading);
+			}
+		}
+
+		## create Readings ##
 		foreach my $ch (sort keys %{$HTML}) {
 			## Kanäle ##
 			Log3 $name, 4, "#################################################";
