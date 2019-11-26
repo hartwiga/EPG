@@ -843,7 +843,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 	## check channels in attr Ch_select available in file (new available channels) ##
 	if ($Ch_select) {
 		for(my $i=0;$i<=$#Ch_select_array;$i++) {
-			if (not grep /$Ch_select_array[$i]/, @channel_available) {
+			if (not grep /^$Ch_select_array[$i]$/, @channel_available) {
 				my $cnt = 0;
 				my %mod = map { ($_ => 1) }
 							grep { $_ !~ m/^$Ch_select_array[$i](:.+)?$/ }
@@ -1070,7 +1070,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	}
 
 	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
-	
+	Log3 $name, 5, "$name: nonBlock_loadEPG_v1 value JSON for delivery: $json_HTML";
 	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
 }
@@ -1094,9 +1094,10 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
 
 		readingsBeginUpdate($hash);
+		readingsBulkUpdate($hash, "state", "#### ERROR JSON ####");
 		readingsBulkUpdate($hash, "state", $@);
 		readingsBulkUpdate($hash, "state", "$json_HTML");
-		readingsBulkUpdate($hash, "state", "decode_json failed");
+		readingsBulkUpdate($hash, "state", "decode_json failed! use verbose 5 to view more");
 		readingsEndUpdate($hash, 1);
 
 		return "ERROR";
@@ -1348,6 +1349,16 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\\"//g;
+				$mod_cnt++;
+				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+			}
+			if ($values[$i] =~ /\|/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->|<-';
+					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\|/,/g;
 				$mod_cnt++;
 				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
