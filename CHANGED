@@ -1,0 +1,4 @@
+2019-11-26 - Update 66_EPG.pm
+
+- fix write readings on cmd Prime
+- added delete old readings
