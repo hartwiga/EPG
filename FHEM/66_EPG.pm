@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-26 14:25:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-11-27 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -14,7 +14,11 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - input EPG filtre s/["`;']//g; ???
+# - ??? input EPG filtre s/["`;']//g;
+# - !!! Umlaute Readings
+#
+# Features:
+# - definierbare CommandFunktion bei Onklick
 #################################################################
 
 package main;
@@ -93,7 +97,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191125";
+	$hash->{VERSION} = "20191127";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -928,7 +932,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 	if ($cmd eq "loadEPG_Prime") {
 		if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
-			my @time = split(/-\s:/,FmtDateTime(time()));
+			my @time = split(/-|\s|:/,FmtDateTime(time()));
 			$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
 			$TimeNow =~ s/-|:|\s//g;
 			$TimeNow.= " +0200";
@@ -1105,13 +1109,13 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		return "ERROR";
 	}
 	
-	if ($Ch_Info_to_Reading eq "yes" && $cmd eq "loadEPG_now") {
+	if ($Ch_Info_to_Reading eq "yes" && $cmd =~ /loadEPG_(Prime|now)/) {
 		readingsBeginUpdate($hash);
 
-		## delete old  Readings ##
+		## delete old Readings ##
 		foreach my $reading (keys %{$hash->{READINGS}}) {
 			if ($reading =~ /^x_.*/ && (not grep /^$reading$/, @Ch_select_array)) {
-				Log3 $name, 5, "$name: readingsDeleteChannel delete $reading";
+				Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done delete reading $reading";
 				readingsDelete($hash,$reading);
 			}
 		}
@@ -1258,6 +1262,8 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
+	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
@@ -1269,6 +1275,15 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v2Done ".Dumper\$HTML;
 
 	if ($Ch_Info_to_Reading eq "yes" && $cmd =~ /loadEPG_(Prime|now)/) {
+
+		## delete old Readings ##
+		foreach my $reading (keys %{$hash->{READINGS}}) {
+			if ($reading =~ /^x_.*/ && (not grep /^$reading$/, @Ch_select_array)) {
+				Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done delete reading $reading";
+				readingsDelete($hash,$reading);
+			}
+		}
+
 		## create Readings ##
 		readingsBeginUpdate($hash);
 
