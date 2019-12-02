@@ -57,6 +57,7 @@ sub EPG_Initialize($) {
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
 	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
+																		"FavoriteShows ".
                                     "Table:on,off Table_view_Subtitle:no,yes disable ".
                                     "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
 												             #$readingFnAttributes;
@@ -133,7 +134,12 @@ sub EPG_Get($$$@) {
 	$cmd2 = "" if (!$cmd2);
 
 	my $getlist = "loadFile:noArg ";
-	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && ReadingsVal($name, "HttpResponse", undef) eq "downloaded" && ReadingsVal($name, "EPG_file_name", undef) ne "file not found");
+	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
+	                                           ReadingsVal($name, "HttpResponse", undef) eq "downloaded" &&
+                                             ReadingsVal($name, "EPG_file_name", undef) ne "file not found");
+		$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
+	                                      AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
+																		    scalar(@channel_available) > 0 ); # favorite shows
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -169,7 +175,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-		if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "") {
+		if ( AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" && scalar(@channel_available) > 0 ) {
 			$getlist.= "loadEPG_now:noArg ";               # now
 			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 			$getlist.= "loadEPG_today:noArg ";             # today all
@@ -189,13 +195,18 @@ sub EPG_Get($$$@) {
 			}
 		}
 
-		if ($cmd =~ /^loadEPG/) {
+		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
  			$HTML = {};
 			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
+		}
+
+		if ($cmd eq "loadEPG_Fav") {
+			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
+			return "still in development - $cmd on $Variant";
 		}
 	}
 
@@ -205,13 +216,18 @@ sub EPG_Get($$$@) {
 			$getlist.= "loadEPG_Prime:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "20:15" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
 		}
  		
-		if ($cmd =~ /^loadEPG/) {
+		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
 			$HTML = {};
 			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v2", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v2Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
+		}
+		
+		if ($cmd eq "loadEPG_Fav") {
+			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
+			return "still in development - $cmd on $Variant";
 		}
 	}
 
@@ -1558,6 +1574,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
+	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
+	Names of programs which are searched for separately. (values ​​must be separated by a semicolon)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximum time in seconds for the download. (default 10 | maximum 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
@@ -1656,6 +1674,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
+	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
+	Namen von Sendungen welche gezielt gesucht werden k&ouml;nnen. (mehrere Werte m&uuml;ssen durch ein Semikolon getrennt werden)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximale Zeit in Sekunden für den Download. (Standard 10 | maximal 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
