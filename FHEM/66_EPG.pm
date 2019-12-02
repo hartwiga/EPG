@@ -29,6 +29,45 @@ use warnings;
 use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
+my %EPG_transtable_EN = ( 
+		## EPG_FW_Detail ##
+		"control_pan_btn"   =>  "list of all available channels",
+    "broadcast"         =>  "Broadcast",
+    "channel"           =>  "Channel",
+    "control_pan"       =>  "Control panel",
+    "description"       =>  "Description",
+    "end"               =>  "End",
+    "epg_info"          =>  "no EPG Data",
+    "read_ch"           =>  "readed channels",
+    "select_ch"         =>  "selected channels",
+    "start"             =>  "Start",
+		## EPG_FW_Popup_Channels ##
+    "active"            =>  "active",
+    "no"                =>  "no.",
+    "tv_fav"            =>  "FAV",
+    "tv_name"           =>  "TV station name"
+    );
+    
+ my %EPG_transtable_DE = ( 
+		## EPG_FW_Detail ##
+		"control_pan_btn"   =>  "Liste der verfügbaren Kanäle",
+    "broadcast"         =>  "Sendung",
+    "channel"           =>  "Sender",
+    "control_pan"       =>  "Bedienfeld",
+    "description"       =>  "Beschreibung",
+    "end"               =>  "Ende",
+    "epg_info"          =>  "keine EPG Daten",
+    "read_ch"           =>  "eingelesene Kanäle",
+    "select_ch"         =>  "ausgewählte Kanäle",
+    "start"             =>  "Start",
+		## EPG_FW_Popup_Channels ##
+    "active"            =>  "aktiv",
+    "no"                =>  "Nr.",
+    "tv_fav"            =>  "FAV",
+    "tv_name"           =>  "TV Sendername"
+    );
+    
+my $EPG_tt;
 my $missingModulEPG = "";
 my $osname = $^O;
 my $gzError;
@@ -61,6 +100,15 @@ sub EPG_Initialize($) {
                                     "Table:on,off Table_view_Subtitle:no,yes disable ".
                                     "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
 												             #$readingFnAttributes;
+
+	## in any attribute redefinition readjust language ##
+	my $lang = AttrVal("global","language","EN");
+  if($lang eq "DE") {
+		$EPG_tt = \%EPG_transtable_DE;
+	} else {
+		$EPG_tt = \%EPG_transtable_EN;
+	}
+
 }
 
 #####################
@@ -75,6 +123,14 @@ sub EPG_Define($$) {
 
 	return "ERROR: you need ".$missingModulEPG."package to use this module" if ($missingModulEPG ne "");
 	return "Usage: define <name> $name"  if(@arg != 2);
+
+  ## readjust language ##
+  my $lang = AttrVal("global","language","EN");
+  if( $lang eq "DE"){
+    $EPG_tt = \%EPG_transtable_DE;
+  }else{
+    $EPG_tt = \%EPG_transtable_EN;
+  }
 
 	if ($init_done) {
 		if (!defined(AttrVal($autocreateName, "disable", undef)) && !exists($defs{$filelogName})) {
@@ -98,7 +154,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191127";
+	$hash->{VERSION} = "20191202";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -240,6 +296,14 @@ sub EPG_Attr() {
 	my $hash = $defs{$name};
 	my $typ = $hash->{TYPE};
 
+  ## in any attribute redefinition readjust language ##
+  my $lang = AttrVal("global","language","EN");
+  if( $lang eq "DE"){
+    $EPG_tt = \%EPG_transtable_DE;
+  } else {
+    $EPG_tt = \%EPG_transtable_EN;
+  }
+
 	if ($cmd eq "set" && $init_done == 1 ) {
 		if ($attrName eq "Ch_Info_to_Reading" && $attrValue eq "no") {
 			EPG_readingsDeleteChannel($hash);
@@ -279,7 +343,15 @@ sub EPG_FW_Detail($@) {
 	my $ret = "";
 	my @Channels_value;
 
-	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table)";
+  ## readjust language ##
+  my $lang = AttrVal("global","language","EN");
+  if($lang eq "DE") {
+    $EPG_tt = \%EPG_transtable_DE;
+  } else {
+    $EPG_tt = \%EPG_transtable_EN;
+  }
+
+	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table, language=$lang)";
 	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
 
 	if ($Ch_select) {
@@ -290,13 +362,13 @@ sub EPG_FW_Detail($@) {
 	if (scalar(@channel_available) > 0) {
 		if ($FW_detail) {
 			### Control panel ###
-			$ret .= "<div class='makeTable wide'><span>Control panel</span>
+			$ret .= "<div class='makeTable wide'><span>".$EPG_tt->{"control_pan"}."</span>
 							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}' class='block wide'>
 							<tr class='even'>";
 
-			$ret .= "<td><a href='#button1' id='button1'>list of all available channels</a></td>";
-			$ret .= "<td> read channels:". scalar(@channel_available) ."</td>";
-			$ret .= "<td> selected channels: ". $cnt ."</td>";
+			$ret .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
+			$ret .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@channel_available) ."</td>";
+			$ret .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt ."</td>";
 			$ret .= "</tr></table></div>";
 		}
 
@@ -376,7 +448,7 @@ sub EPG_FW_Detail($@) {
 		### HTML ###
 		return $ret if ($Table eq "off");
 		$ret .= "<div><br></div>" if ($FW_detail eq "");
-		$ret .= "<div id=\"table\"><center>- no EPG Data -</center></div>" if not ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG});
+		$ret .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG});
 
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 		
@@ -390,9 +462,9 @@ sub EPG_FW_Detail($@) {
 			my $date = FmtDateTime(time()); # 2019-12-02 14:06:46
 			$date = substr($date,0,index($date," "));
 
-			$Table_view_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
+			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
-			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung  <small>(vom ".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
@@ -456,7 +528,7 @@ sub EPG_FW_Popup_Channels {
 	Log3 $name, 4, "$name: FW_Channels is running";
 
 	$ret.= "<table>";
-	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>no.</td><td>active</td><td>TV station name</td><td>FAV</td></tr>";
+	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>".$EPG_tt->{"no"}."</td><td>".$EPG_tt->{"active"}."</td><td>".$EPG_tt->{"tv_name"}."</td><td>".$EPG_tt->{"tv_fav"}."</td></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
 		$style_background = "background-color:#F0F0D8;" if ($i % 2 == 0);
