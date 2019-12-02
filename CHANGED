@@ -1,3 +1,7 @@
+2019-12-02 - Update 66_EPG.pm
+
+- added clean Readings if no aviable channels
+- Ch_Info_to_Reading work now with loadEPG_today
 2019-11-26 - Update 66_EPG.pm
 
 - fix write readings on cmd Prime
