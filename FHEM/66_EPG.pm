@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-11-27 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-02 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -371,10 +371,12 @@ sub EPG_FW_Detail($@) {
 			my $subtitle = "";
 			my $desc = "";
 			my $cnt_infos = 0;
+			my $date = FmtDateTime(time()); # 2019-12-02 14:06:46
+			$date = substr($date,0,index($date," "));
 
 			$Table_view_Subtitle = "<th>Beschreibung</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
-			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung</th>$Table_view_Subtitle</tr>";
+			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>Sender</th><th>Start</th><th>Ende</th><th>Sendung  <small>(vom ".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
@@ -419,7 +421,10 @@ sub EPG_FW_Detail($@) {
 			}
 			$ret .= "</table></div>";			
 		}
+	} else {
+		EPG_readingsDeleteChannel($hash);
 	}
+
 	return $ret;
 }
 
@@ -1005,7 +1010,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						if ($cmd ne "loadEPG_today") {
 							$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
 						} else {
-							$ch_found++ if ($today_end gt $start && $today_start lt $end);                     # Zeitpunktsuche, kompletter Tag
+              # Zeitpunktsuche, kompletter Tag
+							if (($start eq $today_start || $start gt $today_start) && ($end eq $today_end || $end lt $today_end) || ($start lt $today_end && ($end gt $today_end || $end eq $today_end))) {
+								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | start            -> $start";
+								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | today_start      -> $today_start";
+								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | end              -> $end";
+								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | today_end        -> $today_end";
+								$ch_found++;
+							}
 						}
 					}
 				}
@@ -1109,9 +1121,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		return "ERROR";
 	}
 	
-	if ($Ch_Info_to_Reading eq "yes" && $cmd =~ /loadEPG_(Prime|now)/) {
-		readingsBeginUpdate($hash);
-
+	if ($Ch_Info_to_Reading eq "yes") {
 		## delete old Readings ##
 		foreach my $reading (keys %{$hash->{READINGS}}) {
 			if ($reading =~ /^x_.*/ && (not grep /^$reading$/, @Ch_select_array)) {
@@ -1120,23 +1130,32 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 		}
 
-		## create Readings ##
-		foreach my $ch (sort keys %{$HTML}) {
-			## Kanäle ##
-			Log3 $name, 4, "#################################################";
-			Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
-			# start end title
-			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+		if ($cmd =~ /loadEPG_/) {
+			## create Readings ##
+			readingsBeginUpdate($hash);
 
-				readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
+			foreach my $ch (sort keys %{$HTML}) {
+				## Kanäle ##
+				Log3 $name, 4, "#################################################";
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done ch          -> $ch";
+				# start end title
+				for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done array value -> ".$i;
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+
+					readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title}) if ($cmd eq "loadEPG_now" || $cmd eq "loadEPG_Prime");
+					if ($cmd eq "loadEPG_today") {
+						my $time = substr($HTML->{$ch}{EPG}[$i]{start},8,2).":".substr($HTML->{$ch}{EPG}[$i]{start},10,2)."-".substr($HTML->{$ch}{EPG}[$i]{end},8,2).":".substr($HTML->{$ch}{EPG}[$i]{end},10,2);
+						Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done time fromto -> ".$time;
+						readingsBulkUpdate($hash, "x_".$ch."_".$time, $HTML->{$ch}{EPG}[$i]{title});
+					}
+				}
 			}
-		}
 
-		readingsEndUpdate($hash, 1);
+			readingsEndUpdate($hash, 1);
+		}
 	}
 
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
@@ -1274,8 +1293,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 
 	#Log3 $name, 3, "$name: nonBlock_loadEPG_v2Done ".Dumper\$HTML;
 
-	if ($Ch_Info_to_Reading eq "yes" && $cmd =~ /loadEPG_(Prime|now)/) {
-
+	if ($Ch_Info_to_Reading eq "yes") {
 		## delete old Readings ##
 		foreach my $reading (keys %{$hash->{READINGS}}) {
 			if ($reading =~ /^x_.*/ && (not grep /^$reading$/, @Ch_select_array)) {
@@ -1284,23 +1302,25 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 			}
 		}
 
-		## create Readings ##
-		readingsBeginUpdate($hash);
+		if ($cmd =~ /loadEPG_(Prime|now)/) {
+			## create Readings ##
+			readingsBeginUpdate($hash);
 
-		foreach my $ch (sort keys %{$HTML}) {
-			## Kanäle ##
-			Log3 $name, 4, "#################################################";
-			Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done ch          -> $ch";
-			# start end title
-			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
-				# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
+			foreach my $ch (sort keys %{$HTML}) {
+				## Kanäle ##
+				Log3 $name, 4, "#################################################";
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done ch          -> $ch";
+				# start end title
+				for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+					# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done start       -> ".$HTML->{$ch}{EPG}[$i]{start};
+					# Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
 
-				readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
+					readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title});
+				}
 			}
+			readingsEndUpdate($hash, 1);
 		}
-		readingsEndUpdate($hash, 1);
 	}
 
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
