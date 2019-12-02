@@ -30,6 +30,8 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 my %EPG_transtable_EN = ( 
+		## EPG_Get ##
+		"get_available_ch"  =>  "available_channels search",
 		## EPG_FW_Detail ##
 		"control_pan_btn"   =>  "list of all available channels",
     "broadcast"         =>  "Broadcast",
@@ -45,10 +47,17 @@ my %EPG_transtable_EN = (
     "active"            =>  "active",
     "no"                =>  "no.",
     "tv_fav"            =>  "FAV",
-    "tv_name"           =>  "TV station name"
-    );
+    "tv_name"           =>  "TV station name",
+    ## EPG_nonBlock_available_channelsDone ##
+		"chDone_msg_OK"     =>  "EPG available with get loadEPG command!",
+		"chDone_msg_OK2"    =>  "available_channels loaded! Please select channel on Control panel.",
+		## EPG_nonBlock_loadEPG ##
+		"loadEPG_msg1"      =>  "EPG all channel information loaded"
+		);
     
  my %EPG_transtable_DE = ( 
+		## EPG_Get ##
+		"get_available_ch"  =>  "verfügbare Kanäle werden gesucht",
 		## EPG_FW_Detail ##
 		"control_pan_btn"   =>  "Liste der verfügbaren Kanäle",
     "broadcast"         =>  "Sendung",
@@ -64,7 +73,12 @@ my %EPG_transtable_EN = (
     "active"            =>  "aktiv",
     "no"                =>  "Nr.",
     "tv_fav"            =>  "FAV",
-    "tv_name"           =>  "TV Sendername"
+    "tv_name"           =>  "TV Sendername",
+    ## EPG_nonBlock_available_channelsDone ##
+		"chDone_msg_OK"     =>  "EPG mit get loadEPG Befehlen verfügbar!",
+		"chDone_msg_OK2"    =>  "verfügbaren Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
+		## EPG_nonBlock_loadEPG ##
+		"loadEPG_msg1"      =>  "alle EPG Daten geladen"
     );
     
 my $EPG_tt;
@@ -225,7 +239,7 @@ sub EPG_Get($$$@) {
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		@channel_available = ();
 
-		readingsSingleUpdate($hash, "state", "available_channels search", 1);
+		readingsSingleUpdate($hash, "state", $EPG_tt->{"get_available_ch"}, 1);
     $hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_available_channels", $name."|".ReadingsVal($name, "EPG_file_name", undef), "EPG_nonBlock_available_channelsDone", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 		return undef;
 	}
@@ -968,9 +982,9 @@ sub EPG_nonBlock_available_channelsDone($) {
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	
 	if (AttrVal($name, "Ch_select", undef)) {
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,EPG available with get loadEPG command!");
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK"});
 	} else {
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,available_channels loaded! Please select channel on Control panel.");
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK2"});
 	}
 }
 
@@ -1166,7 +1180,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 			}
 		close FileCheck;
 
-		$EPG_info = "EPG all channel information loaded" if ($data_found != -1);
+		$EPG_info = $EPG_tt->{"loadEPG_msg1"} if ($data_found != -1);
 		$EPG_info = "EPG no channel information available!" if ($data_found == -1);
 	} else {
 		$EPG_info = "ERROR: loaded Information Canceled. file not found!";
@@ -1350,7 +1364,7 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{desc} = $desc;
 			}
 		}
-		$EPG_info = "EPG all channel information loaded" if ($data_found != -1);
+		$EPG_info = $EPG_tt->{"loadEPG_msg1"} if ($data_found != -1);
 		$EPG_info = "EPG no channel information available!" if ($data_found == -1);
 	} else {
 		$EPG_info = "ERROR: loaded Information Canceled. file not found!";
