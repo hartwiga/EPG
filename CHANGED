@@ -1,5 +1,8 @@
 2019-12-02 - Update 66_EPG.pm
 
+- added translation table
+2019-12-02 - Update 66_EPG.pm
+
 - added command loadEPG_Fav
 - added attrib list with FavoriteShows
 - revised commandref
