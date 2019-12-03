@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-02 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-03 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -31,56 +31,106 @@ use Data::Dumper;
 
 my %EPG_transtable_EN = ( 
 		## EPG_Get ##
-		"get_available_ch"  =>  "available_channels search",
+		"get_available_ch"    =>  "available_channels search",
+		"get_loadEPG"         =>  "accomplished",
 		## EPG_FW_Detail ##
-		"control_pan_btn"   =>  "list of all available channels",
-    "broadcast"         =>  "Broadcast",
-    "channel"           =>  "Channel",
-    "control_pan"       =>  "Control panel",
-    "description"       =>  "Description",
-    "end"               =>  "End",
-    "epg_info"          =>  "no EPG Data",
-    "read_ch"           =>  "readed channels",
-    "select_ch"         =>  "selected channels",
-    "start"             =>  "Start",
+		"control_pan_btn"     =>  "list of all available channels",
+    "broadcast"           =>  "Broadcast",
+    "channel"             =>  "Channel",
+    "control_pan"         =>  "Control panel",
+    "description"         =>  "Description",
+    "end"                 =>  "End",
+    "epg_info"            =>  "no EPG Data",
+    "read_ch"             =>  "readed channels",
+    "select_ch"           =>  "selected channels",
+    "start"               =>  "Start",
 		## EPG_FW_Popup_Channels ##
-    "active"            =>  "active",
-    "no"                =>  "no.",
-    "tv_fav"            =>  "FAV",
-    "tv_name"           =>  "TV station name",
+    "active"              =>  "active",
+    "no"                  =>  "no.",
+    "tv_fav"              =>  "FAV",
+    "tv_name"             =>  "TV station name",
+		## EPG_FW_set_Attr_Channels ##
+    "set_Attr_Ch_eq"      =>  "no channel selected",
+    "set_Attr_Ch_state"   =>  "EPG available with get loadEPG command",
+		## EPG_ParseHttpResponse ##
+    "ParseHttp_state1"    =>  "no information received",
+		"ParseHttp_state2"    =>  "downloading not finish in the maximum time from HTTP_TimeOut",
+		"ParseHttp_state_ok"  =>  "data received",
+		"ParseHttp_gz_error"  =>  "ERROR: unpack gz failed,",
+		"ParseHttp_xz_error"  =>  "ERROR: unpack xz failed,",
+		"ParseHttp_Http_ok"   =>  "downloaded",
+		"ParseHttp_Http_URL"  =>  "DownloadURL was not found",
+		"ParseHttp_Http_file" =>  "DownloadFile was not found on URL",
+		## EPG_File_check ##
+		"File_check_fileage"  =>  "unknown",
+		"File_check_DownFile" =>  "file not found",
+		## EPG_nonBlock_available_channels ##
+		"available_ch_ok"     =>  "ERROR: EPG_file no found at ./FHEM/EPG",
     ## EPG_nonBlock_available_channelsDone ##
-		"chDone_msg_OK"     =>  "EPG available with get loadEPG command!",
-		"chDone_msg_OK2"    =>  "available_channels loaded! Please select channel on Control panel.",
+		"chDone_state1"       =>  "unknown methode! need development!",
+		"chDone_msg_OK"       =>  "EPG available with get loadEPG command!",
+		"chDone_msg_OK2"      =>  "available_channels loaded! Please select channel on Control panel.",
+		## EPG_nonBlock_loadEPG_v1Done ##
+		"loadEPG_v1Done"      =>  "decode_json failed, use verbose 5 to view more",
 		## EPG_nonBlock_loadEPG ##
-		"loadEPG_msg1"      =>  "EPG all channel information loaded"
+		"loadEPG_msg1"        =>  "all EPG channel information loaded",
+		"loadEPG_msg2"        =>  "no EPG channel information available",
+		"loadEPG_msg3"        =>  "ERROR: loaded Information canceled, file not found",
+		## EPG_nonBlock_abortFn ##
+		"nonBlock_abortFn"    =>  "timeout nonBlock function"
 		);
     
  my %EPG_transtable_DE = ( 
 		## EPG_Get ##
-		"get_available_ch"  =>  "verfügbare Kanäle werden gesucht",
+		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
+		"get_loadEPG"         =>  "angenommen",
 		## EPG_FW_Detail ##
-		"control_pan_btn"   =>  "Liste der verfügbaren Kanäle",
-    "broadcast"         =>  "Sendung",
-    "channel"           =>  "Sender",
-    "control_pan"       =>  "Bedienfeld",
-    "description"       =>  "Beschreibung",
-    "end"               =>  "Ende",
-    "epg_info"          =>  "keine EPG Daten",
-    "read_ch"           =>  "eingelesene Kanäle",
-    "select_ch"         =>  "ausgewählte Kanäle",
-    "start"             =>  "Start",
+		"control_pan_btn"     =>  "Liste der verfügbaren Kanäle",
+    "broadcast"           =>  "Sendung",
+    "channel"             =>  "Sender",
+    "control_pan"         =>  "Bedienfeld",
+    "description"         =>  "Beschreibung",
+    "end"                 =>  "Ende",
+    "epg_info"            =>  "keine EPG Daten",
+    "read_ch"             =>  "eingelesene Kanäle",
+    "select_ch"           =>  "ausgewählte Kanäle",
+    "start"               =>  "Start",
 		## EPG_FW_Popup_Channels ##
-    "active"            =>  "aktiv",
-    "no"                =>  "Nr.",
-    "tv_fav"            =>  "FAV",
-    "tv_name"           =>  "TV Sendername",
+    "active"              =>  "aktiv",
+    "no"                  =>  "Nr.",
+    "tv_fav"              =>  "FAV",
+    "tv_name"             =>  "TV Sendername",
+		## EPG_FW_set_Attr_Channels ##
+    "set_Attr_Ch_eq"      =>  "keinen Kanal ausgewählt",
+    "set_Attr_Ch_state"   =>  "EPG verfügbar mit dem Befehl get loadEPG",
+		## EPG_ParseHttpResponse ##
+    "ParseHttp_state1"    =>  "keine Informationen erhalten",
+		"ParseHttp_state2"    =>  "Der Download ist nicht in der maximalen Zeit von HTTP_TimeOut beendet.",
+		"ParseHttp_state_ok"  =>  "Daten empfangen",
+		"ParseHttp_gz_error"  =>  "ERROR: unpack gz fehlgeschlagen,",
+		"ParseHttp_xz_error"  =>  "ERROR: unpack xz fehlgeschlagen,",
+		"ParseHttp_Http_ok"   =>  "heruntergeladen",
+		"ParseHttp_Http_URL"  =>  "DownloadURL wurde nicht gefunden",
+		"ParseHttp_Http_file" =>  "DownloadFile wurde in der URL nicht gefunden",
+		## EPG_File_check ##
+		"File_check_fileage"  =>  "unbekannt",
+		"File_check_DownFile" =>  "Datei nicht gefunden",
+		## EPG_nonBlock_available_channels ##
+		"available_ch_ok"     =>  "ERROR: EPG Datei nicht gefunden in ./FHEM/EPG",
     ## EPG_nonBlock_available_channelsDone ##
-		"chDone_msg_OK"     =>  "EPG mit get loadEPG Befehlen verfügbar!",
-		"chDone_msg_OK2"    =>  "verfügbaren Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
+		"chDone_state1"       =>  "unbekannte Methode, Entwicklung notwendig!",
+		"chDone_msg_OK"       =>  "EPG mit get loadEPG Befehlen verfügbar!",
+		"chDone_msg_OK2"      =>  "verfügbaren Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
+		## EPG_nonBlock_loadEPG_v1Done ##
+		"loadEPG_v1Done"      =>  "decode_json fehlgeschlagen, bitte benutze verbose 5 um mehr zu erkennen",
 		## EPG_nonBlock_loadEPG ##
-		"loadEPG_msg1"      =>  "alle EPG Daten geladen"
+		"loadEPG_msg1"        =>  "alle EPG Daten geladen",
+		"loadEPG_msg2"        =>  "keine EPG Daten verfügbar",
+		"loadEPG_msg3"        =>  "ERROR: Information laden abgebrochen, Datei nicht gefunden",
+		## EPG_nonBlock_abortFn ##
+		"nonBlock_abortFn"    =>  "Zeitüberschreitung nonBlock Funktion"
     );
-    
+
 my $EPG_tt;
 my $missingModulEPG = "";
 my $osname = $^O;
@@ -168,7 +218,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191202";
+	$hash->{VERSION} = "20191203";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -207,9 +257,9 @@ sub EPG_Get($$$@) {
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
 	                                           ReadingsVal($name, "HttpResponse", undef) eq "downloaded" &&
                                              ReadingsVal($name, "EPG_file_name", undef) ne "file not found");
-		$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
-	                                      AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
-																		    scalar(@channel_available) > 0 ); # favorite shows
+	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
+	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
+																	    scalar(@channel_available) > 0 ); # favorite shows
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -267,7 +317,7 @@ sub EPG_Get($$$@) {
 
 		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
  			$HTML = {};
-			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
+			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
@@ -288,7 +338,7 @@ sub EPG_Get($$$@) {
  		
 		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
 			$HTML = {};
-			readingsSingleUpdate($hash, "state", "$cmd accomplished", 1);
+			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v2", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v2Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
@@ -576,7 +626,7 @@ sub EPG_FW_set_Attr_Channels {
 		Log3 $name, 4, "$name: FW_set_Attr_Channels all Channels delete and clean view";
 		CommandDeleteAttr($hash,"$name Ch_select");
 		CommandDeleteAttr($hash,"$name Ch_sort");
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,no channels selected");
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
 		$HTML = {};
 
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
@@ -601,7 +651,7 @@ sub EPG_FW_set_Attr_Channels {
 				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
-		readingsSingleUpdate($hash, "state" , "EPG available with get loadEPG command", 1);
+		readingsSingleUpdate($hash, "state" , $EPG_tt->{"set_Attr_Ch_state"}, 1);
 	}
 	#Log3 $name, 5, "$name: FW_set_Attr_Channels ".Dumper\$HTML;
 }
@@ -632,7 +682,7 @@ sub EPG_ParseHttpResponse($$$) {
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $HttpResponse = "";
 	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
-	my $state = "no information received";
+	my $state = $EPG_tt->{"ParseHttp_state1"};
 	my $FileAge = undef;
 
 	Log3 $name, 5, "$name: ParseHttpResponse - error: $err";
@@ -641,10 +691,10 @@ sub EPG_ParseHttpResponse($$$) {
 	if ($err ne "") {                                                          # wenn ein Fehler bei der HTTP Abfrage aufgetreten ist
 		$HttpResponse = $err;
 		Log3 $name, 3, "$name: ParseHttpResponse - error: $err";
-		$state = "downloading not finish in the maximum time from $HTTP_TimeOut seconds (slow)" if (grep /timed out/, $err);
+		$state = $EPG_tt->{"ParseHttp_state2"} if (grep /timed out/, $err);
 	} elsif ($http_param->{code} ne "200") {                                   # HTTP code
-		$HttpResponse = "DownloadFile $DownloadFile was not found on URL" if (grep /$DownloadFile\swas\snot\sfound/, $data);
-		$HttpResponse = "DownloadURL was not found" if (grep /URL\swas\snot\sfound/, $data);
+		$HttpResponse = $EPG_tt->{"ParseHttp_Http_file"} if (grep /$DownloadFile\swas\snot\sfound/, $data);
+		$HttpResponse = $EPG_tt->{"ParseHttp_Http_URL"} if (grep /URL\swas\snot\sfound/, $data);
 		Log3 $name, 3, "$name: ParseHttpResponse - error:\n\n$data";
 	} elsif ($http_param->{code} eq "200" && $data ne "") {                    # wenn die Abfrage erfolgreich war ($data enthält die Ergebnisdaten des HTTP Aufrufes)
    	my $filename = "FHEM/EPG/$DownloadFile";
@@ -659,7 +709,7 @@ sub EPG_ParseHttpResponse($$$) {
 			($gzError, $DownloadFile) = EPG_UnCompress_gz($hash,$DownloadFile);    # Datei Unpack gz
 			if ($gzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($gzError)";
-				readingsSingleUpdate($hash, "state", "ERROR: unpack failed ($gzError)", 1);
+				readingsSingleUpdate($hash, "state", $EPG_tt->{"ParseHttp_gz_error"}." $gzError", 1);
 				return $gzError
 			};
 		} elsif ($DownloadFile =~ /.*\.xz$/) {
@@ -667,15 +717,15 @@ sub EPG_ParseHttpResponse($$$) {
 			($xzError, $DownloadFile) = EPG_UnCompress_xz($hash,$DownloadFile);    # Datei Unpack xz
 			if ($xzError) {
 				Log3 $name, 2, "$name: ParseHttpResponse unpack of $DownloadFile failed! ($xzError)";
-				readingsSingleUpdate($hash, "state", "ERROR: unpack xz failed ($gzError)", 1);
+				readingsSingleUpdate($hash, "state", $EPG_tt->{"ParseHttp_xz_error"}." $gzError", 1);
 				return $xzError;
 			}
 		}
 
 		EPG_File_check($hash) if ($osname ne "MSWin32");
 		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
-		$state = "information received";
-		$HttpResponse = "downloaded";
+		$state = 	$EPG_tt->{"ParseHttp_state_ok"};
+		$HttpResponse = $EPG_tt->{"ParseHttp_Http_ok"};
 	}
 
 	readingsBeginUpdate($hash);
@@ -793,7 +843,7 @@ sub EPG_File_check {
 	my $name = $hash->{NAME};
 	my $DownloadFile = AttrVal($name, "DownloadFile", "no file found");
 	my $DownloadFile_found = 0;
-	my $FileAge = "unknown";
+	my $FileAge = $EPG_tt->{"File_check_fileage"};
 
 	## check files ##
 	opendir(DIR,"./FHEM/EPG");																		# not need -> || return "ERROR: directory $path can not open!"
@@ -824,7 +874,7 @@ sub EPG_File_check {
 		Log3 $name, 5, "$name: File_check ready - file size: ".$stat_DownloadFile[7]." byte";
 	} else {
 		Log3 $name, 5, "$name: File_check nothing file found";
-		$DownloadFile = "file not found";
+		$DownloadFile = $EPG_tt->{"File_check_DownFile"};
 	}
 
 	readingsBeginUpdate($hash);
@@ -908,8 +958,7 @@ sub EPG_nonBlock_available_channels($) {
 			$additive_info = $hash->{helper}{programm};	
 		}
 	} else {
-		$Variant = "not detectable";
-		$ok = "error, file $EPG_file_name no found at ./FHEM/EPG";
+		$ok = $EPG_tt->{"available_ch_ok"};
 		Log3 $name, 4, "$name: nonBlocking_available_channels file $EPG_file_name not found, need help!";
 	}
 
@@ -939,7 +988,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 	delete($hash->{helper}{RUNNING_PID});
 
 	if ($Variant eq "unknown") {
-		readingsSingleUpdate($hash, "state", "unknown methode! need development!", 1);
+		readingsSingleUpdate($hash, "state", $EPG_tt->{"chDone_state1"}, 1);
 		return "";
 	}
 
@@ -1181,9 +1230,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		close FileCheck;
 
 		$EPG_info = $EPG_tt->{"loadEPG_msg1"} if ($data_found != -1);
-		$EPG_info = "EPG no channel information available!" if ($data_found == -1);
+		$EPG_info = $EPG_tt->{"loadEPG_msg2"} if ($data_found == -1);
 	} else {
-		$EPG_info = "ERROR: loaded Information Canceled. file not found!";
+		$EPG_info = $EPG_tt->{"loadEPG_msg3"};
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
 	}
 
@@ -1217,7 +1266,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		readingsBulkUpdate($hash, "state", "#### ERROR JSON ####");
 		readingsBulkUpdate($hash, "state", $@);
 		readingsBulkUpdate($hash, "state", "$json_HTML");
-		readingsBulkUpdate($hash, "state", "decode_json failed! use verbose 5 to view more");
+		readingsBulkUpdate($hash, "state", $EPG_tt->{"loadEPG_v1Done"});
 		readingsEndUpdate($hash, 1);
 
 		return "ERROR";
@@ -1365,9 +1414,9 @@ sub EPG_nonBlock_loadEPG_v2($) {
 			}
 		}
 		$EPG_info = $EPG_tt->{"loadEPG_msg1"} if ($data_found != -1);
-		$EPG_info = "EPG no channel information available!" if ($data_found == -1);
+		$EPG_info = $EPG_tt->{"loadEPG_msg2"} if ($data_found == -1);
 	} else {
-		$EPG_info = "ERROR: loaded Information Canceled. file not found!";
+		$EPG_info = $EPG_tt->{"loadEPG_msg3"};
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v2 | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
 	}
 
