@@ -30,6 +30,27 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 my %EPG_transtable_EN = ( 
+		## Days ##
+		"day1"                =>  "Monday",
+		"day2"                =>  "Tuesday",
+		"day3"                =>  "Wednesday",
+		"day4"                =>  "Thursday",
+		"day5"                =>  "Friday",
+		"day6"                =>  "Saturday",
+		"day7"                =>  "Sunday",
+		## Months ##
+		"months1"             =>  "January",
+		"months2"             =>  "February",
+		"months3"             =>  "March",
+		"months4"             =>  "April",
+		"months5"             =>  "May",
+		"months6"             =>  "June",
+		"months7"             =>  "July",
+		"months8"             =>  "August",
+		"months9"             =>  "September",
+		"months10"            =>  "October",
+		"months11"            =>  "November",
+		"months12"            =>  "December",
 		## EPG_Get ##
 		"get_available_ch"    =>  "available_channels search",
 		"get_loadEPG"         =>  "accomplished",
@@ -81,6 +102,27 @@ my %EPG_transtable_EN = (
 		);
     
  my %EPG_transtable_DE = ( 
+		## Days ##
+		"day1"                =>  "Montag",
+		"day2"                =>  "Dienstag",
+		"day3"                =>  "Mittwoch",
+		"day4"                =>  "Donnerstag",
+		"day5"                =>  "Freitag",
+		"day6"                =>  "Sonnabend",
+		"day7"                =>  "Sonntag",
+		## Months ##
+		"months1"             =>  "Januar",
+		"months2"             =>  "Februar",
+		"months3"             =>  "März",
+		"months4"             =>  "April",
+		"months5"             =>  "Mai",
+		"months6"             =>  "Juni",
+		"months7"             =>  "Juli",
+		"months8"             =>  "August",
+		"months9"             =>  "September",
+		"months10"            =>  "Oktober",
+		"months11"            =>  "November",
+		"months12"            =>  "Dezember",
 		## EPG_Get ##
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
 		"get_loadEPG"         =>  "angenommen",
@@ -255,8 +297,8 @@ sub EPG_Get($$$@) {
 
 	my $getlist = "loadFile:noArg ";
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
-	                                           ReadingsVal($name, "HttpResponse", undef) eq "downloaded" &&
-                                             ReadingsVal($name, "EPG_file_name", undef) ne "file not found");
+	                                           ReadingsVal($name, "HttpResponse", undef) eq $EPG_tt->{"ParseHttp_Http_ok"} &&
+                                             ReadingsVal($name, "EPG_file_name", undef) ne $EPG_tt->{"File_check_DownFile"});
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
 																	    scalar(@channel_available) > 0 ); # favorite shows
@@ -524,7 +566,10 @@ sub EPG_FW_Detail($@) {
 			my $desc = "";
 			my $cnt_infos = 0;
 			my $date = FmtDateTime(time()); # 2019-12-02 14:06:46
-			$date = substr($date,0,index($date," "));
+
+			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
+			#Log3 $name, 3, "$name: FW_Detail sec:$sec, min:$min, hour:$hour, mday:$mday, mon:$mon, year:$year, wday:$wday, ydat:$ydat, isdst:$isdst";
+			$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
