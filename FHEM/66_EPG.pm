@@ -574,7 +574,7 @@ sub EPG_FW_Detail($@) {
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
 			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
-			
+
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
 			foreach my $ch (@positioned) {
@@ -1326,7 +1326,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 		}
 
-		if ($cmd =~ /loadEPG_/) {
+		if ($cmd eq "loadEPG_now" || $cmd eq "loadEPG_Prime" || $cmd eq "loadEPG_today") {
 			## create Readings ##
 			readingsBeginUpdate($hash);
 
@@ -1341,12 +1341,9 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
 
-					readingsBulkUpdate($hash, "x_".$ch, $HTML->{$ch}{EPG}[$i]{title}) if ($cmd eq "loadEPG_now" || $cmd eq "loadEPG_Prime");
-					if ($cmd eq "loadEPG_today") {
-						my $time = substr($HTML->{$ch}{EPG}[$i]{start},8,2).":".substr($HTML->{$ch}{EPG}[$i]{start},10,2)."-".substr($HTML->{$ch}{EPG}[$i]{end},8,2).":".substr($HTML->{$ch}{EPG}[$i]{end},10,2);
-						Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done time fromto -> ".$time;
-						readingsBulkUpdate($hash, "x_".$ch."_".$time, $HTML->{$ch}{EPG}[$i]{title});
-					}
+					my $time = substr($HTML->{$ch}{EPG}[$i]{start},8,2).":".substr($HTML->{$ch}{EPG}[$i]{start},10,2)."-".substr($HTML->{$ch}{EPG}[$i]{end},8,2).":".substr($HTML->{$ch}{EPG}[$i]{end},10,2);
+					#Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done time fromto -> ".$time;
+					readingsBulkUpdate($hash, "x_".$ch."_".$time, $HTML->{$ch}{EPG}[$i]{title});
 				}
 			}
 
@@ -1576,32 +1573,32 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 			if ($values[$i] =~ /\s\\\s/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'-> \ <-';
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'-> \ <-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\s\\\s/ /g;
 				$mod_cnt++;
-				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
 			if ($values[$i] =~ /\\"/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\\"<-';
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\\"<-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\\"//g;
 				$mod_cnt++;
-				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
 			if ($values[$i] =~ /\|/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->|<-';
-					Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->|<-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\|/,/g;
 				$mod_cnt++;
-				Log3 $name, 3, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
 		}
 
