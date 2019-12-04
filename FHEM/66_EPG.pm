@@ -260,7 +260,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191203";
+	$hash->{VERSION} = "20191204";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -369,6 +369,9 @@ sub EPG_Get($$$@) {
 		if ($cmd eq "loadEPG_Fav") {
 			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
 			return "still in development - $cmd on $Variant";
+
+			#$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadFav", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadFavDone", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
+			#return undef;
 		}
 	}
 
@@ -463,6 +466,7 @@ sub EPG_FW_Detail($@) {
 	if ($Ch_select) {
 		@Channels_value = split(",", $Ch_select);
 		$cnt = scalar(@Channels_value);
+		Log3 $name, 5, "$name: FW_Detail - channel_select: ".$cnt;
 	}
 
 	if (scalar(@channel_available) > 0) {
@@ -1053,7 +1057,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 				my %mod = map { ($_ => 1) }
 							grep { $_ !~ m/^$Ch_select_array[$i](:.+)?$/ }
 							split(",", $Ch_select);
-				$attr{$name}{Ch_select} = join(" ", sort keys %mod);
+				$attr{$name}{Ch_select} = join(",", sort keys %mod);
 				delete $attr{$name}{Ch_select} if( (!keys %mod && defined($attr{$name}{Ch_select})) || (defined($attr{$name}{Ch_select}) && $attr{$name}{Ch_select} eq "") );
 				Log3 $name, 4, "$name: nonBlock_available_channelsDone delete $Ch_select_array[$i] from list Ch_select -> not available";
 			}
@@ -1098,6 +1102,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my @gmt = (gmtime(time+$off_h*60*60));
 	my @local = (localtime(time+$off_h*60*60));
 	my $TimeLocaL_GMT_Diff = $gmt[2]-$local[2] + ($gmt[5] <=> $local[5] || $gmt[7] <=> $local[7])*24;
+
 	my $EPG_info = "";
 	my $ch_found = 0;          # counter to verification ch
 	my $ch_id = "";            # TV channel channel id
@@ -1521,13 +1526,71 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 }
 
 #####################
+sub EPG_nonBlock_loadFav($) {
+	my ($string) = @_;
+	my ($name, $EPG_file_name, $cmd, $cmd2) = split("\\|", $string);
+  my $hash = $defs{$name};
+  my $return;
+
+	my $FavoriteShows = AttrVal($name, "FavoriteShows", undef);
+	my @FavoriteShows_array = split(";",$FavoriteShows) if ($FavoriteShows);
+
+  Log3 $name, 3, "$name: nonBlock_loadFav running, $cmd from file $EPG_file_name";
+
+	my $Fav_info = "";
+	my $json_HTML = "";
+
+	eval "use XML::LibXSLT;1" or $Fav_info .= "XML::LibXSLT failed ";
+	eval "use XML::LibXML;;1" or $Fav_info .= "XML::LibXML; failed ";
+
+	if ($Fav_info eq "") {
+		my $parser = XML::LibXML->new(  );
+		my $xslt = XML::LibXSLT->new(  );
+		my $EPG_file = "./FHEM/EPG/$EPG_file_name";
+	
+		if ( -e $EPG_file ) {
+		
+		my $stylesheet_string = <<'XML';
+
+XML
+
+			my $stylesheet = $xslt->parse_stylesheet_file( $stylesheet_string );
+			my $source_doc = $parser->parse_file( $EPG_file );
+			my $result = $stylesheet->transform( $source_doc );
+			$json_HTML = $stylesheet->output_string( $result );
+		} else {
+			$Fav_info = "EPG file for searching not found";
+		}
+	}
+ 
+	$return = $name."|".$EPG_file_name."|".$Fav_info."|".$cmd."|".$json_HTML;
+	return $return;
+}
+
+#####################
+sub EPG_nonBlock_loadFavDone($) {
+	my ($string) = @_;
+	my ($name, $EPG_file_name, $Fav_info, $cmd, $json_HTML) = split("\\|", $string);
+  my $hash = $defs{$name};
+
+	Log3 $name, 3, "$name: nonBlock_loadFavDone running, $cmd from file $EPG_file_name";
+
+	if ($Fav_info ne "") {
+		readingsSingleUpdate($hash, "state", "ERROR: nonBlock_loadFavDone",1);
+	} else {
+		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,loadFavDone finish");	
+	}
+}
+
+#####################
 sub EPG_nonBlock_abortFn($) {
 	my ($hash) = @_;
 	my $name = $hash->{NAME};
 	delete($hash->{helper}{RUNNING_PID});
 
   Log3 $name, 4, "$name: nonBlock_abortFn running";
-	readingsSingleUpdate($hash, "state", "timeout nonBlock function",1);
+	readingsSingleUpdate($hash, "state", $EPG_tt->{"nonBlock_abortFn"},1);
 }
 
 #####################
