@@ -1,3 +1,7 @@
+2019-12-04 - Update 66_EPG.pm
+
+- adaptation text
+- fix channel_select after restart
 2019-12-03 - Update 66_EPG.pm
 
 - customization Readings to standard X_name_time
