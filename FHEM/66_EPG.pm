@@ -31,13 +31,13 @@ use Data::Dumper;
 
 my %EPG_transtable_EN = ( 
 		## Days ##
+		"day0"                =>  "Sunday",
 		"day1"                =>  "Monday",
 		"day2"                =>  "Tuesday",
 		"day3"                =>  "Wednesday",
 		"day4"                =>  "Thursday",
 		"day5"                =>  "Friday",
 		"day6"                =>  "Saturday",
-		"day7"                =>  "Sunday",
 		## Months ##
 		"months1"             =>  "January",
 		"months2"             =>  "February",
@@ -88,9 +88,9 @@ my %EPG_transtable_EN = (
 		## EPG_nonBlock_available_channels ##
 		"available_ch_ok"     =>  "ERROR: EPG_file no found at ./FHEM/EPG",
     ## EPG_nonBlock_available_channelsDone ##
-		"chDone_state1"       =>  "unknown methode! need development!",
+		"chDone_state1"       =>  "unknown methode, need development",
 		"chDone_msg_OK"       =>  "EPG available with get loadEPG command!",
-		"chDone_msg_OK2"      =>  "available_channels loaded! Please select channel on Control panel.",
+		"chDone_msg_OK2"      =>  "available_channels loaded, Please select channel on Control panel",
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json failed, use verbose 5 to view more",
 		## EPG_nonBlock_loadEPG ##
@@ -103,13 +103,13 @@ my %EPG_transtable_EN = (
     
  my %EPG_transtable_DE = ( 
 		## Days ##
+		"day0"                =>  "Sonntag",
 		"day1"                =>  "Montag",
 		"day2"                =>  "Dienstag",
 		"day3"                =>  "Mittwoch",
 		"day4"                =>  "Donnerstag",
 		"day5"                =>  "Freitag",
 		"day6"                =>  "Sonnabend",
-		"day7"                =>  "Sonntag",
 		## Months ##
 		"months1"             =>  "Januar",
 		"months2"             =>  "Februar",
@@ -160,8 +160,8 @@ my %EPG_transtable_EN = (
 		## EPG_nonBlock_available_channels ##
 		"available_ch_ok"     =>  "ERROR: EPG Datei nicht gefunden in ./FHEM/EPG",
     ## EPG_nonBlock_available_channelsDone ##
-		"chDone_state1"       =>  "unbekannte Methode, Entwicklung notwendig!",
-		"chDone_msg_OK"       =>  "EPG mit get loadEPG Befehlen verfügbar!",
+		"chDone_state1"       =>  "unbekannte Methode, Entwicklung notwendig",
+		"chDone_msg_OK"       =>  "EPG mit get loadEPG Befehlen verfügbar",
 		"chDone_msg_OK2"      =>  "verfügbaren Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json fehlgeschlagen, bitte benutze verbose 5 um mehr zu erkennen",
@@ -260,7 +260,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191204";
+	$hash->{VERSION} = "20191206";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
