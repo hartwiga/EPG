@@ -1,5 +1,8 @@
 2019-12-09 - Update 66_EPG.pm
 
+- added option loadEPG_Fav for some methode (user must define attrib FavoriteShows)
+2019-12-09 - Update 66_EPG.pm
+
 - fix weekday sunday
 - revised some user text
 2019-12-04 - Update 66_EPG.pm
