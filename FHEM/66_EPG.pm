@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-03 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-09 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -65,6 +65,7 @@ my %EPG_transtable_EN = (
     "read_ch"             =>  "readed channels",
     "select_ch"           =>  "selected channels",
     "start"               =>  "Start",
+    "date"                =>  "Date",
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "active",
     "no"                  =>  "no.",
@@ -137,6 +138,7 @@ my %EPG_transtable_EN = (
     "read_ch"             =>  "eingelesene Kanäle",
     "select_ch"           =>  "ausgewählte Kanäle",
     "start"               =>  "Start",
+    "date"                =>  "Datum",
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "aktiv",
     "no"                  =>  "Nr.",
@@ -260,7 +262,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191206";
+	$hash->{VERSION} = "20191209";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -368,10 +370,9 @@ sub EPG_Get($$$@) {
 
 		if ($cmd eq "loadEPG_Fav") {
 			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
-			return "still in development - $cmd on $Variant";
 
-			#$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadFav", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadFavDone", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
-			#return undef;
+			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
+			return undef;
 		}
 	}
 
@@ -448,8 +449,10 @@ sub EPG_FW_Detail($@) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
-	my $cnt = 0;
+	my $cnt_ch_select = 0;
+	my $cnt_ch = 0;
 	my $ret = "";
+	my $HTML_switch = 0;
 	my @Channels_value;
 
   ## readjust language ##
@@ -465,8 +468,8 @@ sub EPG_FW_Detail($@) {
 
 	if ($Ch_select) {
 		@Channels_value = split(",", $Ch_select);
-		$cnt = scalar(@Channels_value);
-		Log3 $name, 5, "$name: FW_Detail - channel_select: ".$cnt;
+		$cnt_ch_select = scalar(@Channels_value);
+		Log3 $name, 5, "$name: FW_Detail - channel_select: ".$cnt_ch_select;
 	}
 
 	if (scalar(@channel_available) > 0) {
@@ -478,7 +481,7 @@ sub EPG_FW_Detail($@) {
 
 			$ret .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
 			$ret .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@channel_available) ."</td>";
-			$ret .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt ."</td>";
+			$ret .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt_ch_select ."</td>";
 			$ret .= "</tr></table></div>";
 		}
 
@@ -558,26 +561,41 @@ sub EPG_FW_Detail($@) {
 		### HTML ###
 		return $ret if ($Table eq "off");
 		$ret .= "<div><br></div>" if ($FW_detail eq "");
-		$ret .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG});
 
+		foreach my $d (keys %{$HTML}) {
+			if ($HTML->{$d}{EPG}) {
+				$cnt_ch++;
+				Log3 $name, 5, "$name: FW_Detail - found information for channel ".$d;
+				$HTML_switch++ if (exists $HTML->{$d}{title_wish});
+				#Log3 $name, 5, "$name: FW_Detail Dumper: ".Dumper\$HTML;
+			}
+		}
+
+		$ret .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $cnt_ch != 0);
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
-		
-		if ($Ch_select && defined $HTML->{$Channels_value[0]}{EPG}) {
+
+		if ($Ch_select && $cnt_ch != 0) {
 			my $start = "";
 			my $end = "";
+			my $start = "";
 			my $title = "";
 			my $subtitle = "";
 			my $desc = "";
 			my $cnt_infos = 0;
-			my $date = FmtDateTime(time()); # 2019-12-02 14:06:46
-
-			my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
-			#Log3 $name, 3, "$name: FW_Detail sec:$sec, min:$min, hour:$hour, mday:$mday, mon:$mon, year:$year, wday:$wday, ydat:$ydat, isdst:$isdst";
-			$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
+			my $date;
 
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
-			$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+
+			if ($HTML_switch == 0) { # other view if loadEPG_Fav
+				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
+				#Log3 $name, 3, "$name: FW_Detail sec:$sec, min:$min, hour:$hour, mday:$mday, mon:$mon, year:$year, wday:$wday, ydat:$ydat, isdst:$isdst";
+				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
+
+				$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+			} else {
+				$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
+			}
 
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
@@ -591,7 +609,15 @@ sub EPG_FW_Detail($@) {
 						## einzelne Werte ##
 						#Log3 $name, 3, "$name: description       -> $d";
 						#Log3 $name, 3, "$name: description value -> $value->{$d}";
-						$start = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "start");
+						if ($d eq "start") {
+							$start = substr($value->{$d},8,2).":".substr($value->{$d},10,2);
+							my ($sec,$min,$hour,$mday,$mon,$year) = (substr($value->{$d},12,2),substr($value->{$d},10,2),substr($value->{$d},8,2),substr($value->{$d},6,2),substr($value->{$d},4,2) - 1,substr($value->{$d},0,4) - 1900);
+							my $timestamp = fhemTimeGm($sec, $min, $hour, $mday, $mon, $year);
+							my $wday;
+							($sec,$min,$hour,$mday,$mon,$year,$wday) = localtime($timestamp);
+							$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
+						}
+
 						$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "end");
 						$title = $value->{$d} if ($d eq "title");
 						$desc = $value->{$d} if ($d eq "desc");
@@ -611,12 +637,14 @@ sub EPG_FW_Detail($@) {
 						$desc =~ s/[\r\'\"]/ /g;
 						$desc =~ s/[\n]|\\n/<br>/g;
 
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
+						$ret .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
 						### TEST ###
 						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
 						### TEST ###
 					} else {
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>";
+						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
+						$ret .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
 					}
 				}
 			}
@@ -1053,7 +1081,6 @@ sub EPG_nonBlock_available_channelsDone($) {
 	if ($Ch_select) {
 		for(my $i=0;$i<=$#Ch_select_array;$i++) {
 			if (not grep /^$Ch_select_array[$i]$/, @channel_available) {
-				my $cnt = 0;
 				my %mod = map { ($_ => 1) }
 							grep { $_ !~ m/^$Ch_select_array[$i](:.+)?$/ }
 							split(",", $Ch_select);
@@ -1092,6 +1119,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my ($name, $EPG_file_name, $cmd, $cmd2) = split("\\|", $string);
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
+	my $FavoriteShows = AttrVal($name, "FavoriteShows", undef) if ($cmd eq "loadEPG_Fav");
+	my @FavoriteShows_array = split(";",$FavoriteShows) if ($FavoriteShows);
   my $hash = $defs{$name};
   my $return;
 
@@ -1108,13 +1137,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $ch_id = "";            # TV channel channel id
 	my $ch_name = "";          # TV channel display-name
 	my $ch_name_before = "";   # TV channel display-name before
-	my $data_found;            # counter to verification data
+	my $data_found = -1;       # counter to verification data
 	my $desc = "";             # TV desc
 	my $end = "";              # TV time end
 	my $hour_diff_read = "";   # hour diff from file
 	my $start = "";            # TV time start
 	my $subtitle = "";         # TV subtitle
 	my $title = "";            # TV title
+	my $title_wish;            # TV marker for loadEPG_Fav
 	my $today_end = "";        # today time end
 	my $today_start = "";      # today time start
 
@@ -1168,46 +1198,46 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
 					my $search = $hash->{helper}{programm}{$4}->{name};
 					#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | data for channel    -> $search";
+					($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $search);
 
-					if (grep /$search($|,)/, $Ch_select) {                                      # find in attributes channel
-						($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $search);
-						if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
-							my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | hour_diff_result $hour_diff";
+					if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
+						my $hour_diff = substr($TimeLocaL_GMT_Diff,0,1).substr($TimeLocaL_GMT_Diff,2,1);
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | hour_diff_result $hour_diff";
 
-							my @start_new = split("",$start);
-							my @end_new = split("",$end);
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
-							Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
+						my @start_new = split("",$start);
+						my @end_new = split("",$end);
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
 
-							if (index($hour_diff,"-")) {
-								$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-								$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-							} else {
-								$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-								$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
-							}
-							
-							#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC start new    -> $start";
-							#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC end new      -> $end";
-							
-							$start = FmtDateTime($start);
-							$end = FmtDateTime($end);
-							$start =~ s/-|:|\s//g;
-							$end =~ s/-|:|\s//g;
-							$start.= " $TimeLocaL_GMT_Diff";
-							$end.= " $TimeLocaL_GMT_Diff";
-
-							#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start new        -> $start";
-							#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
+						if (index($hour_diff,"-")) {
+							$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+							$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+						} else {
+							$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
+							$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
 						}
+							
+						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC start new    -> $start";
+						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC end new      -> $end";
 
+						$start = FmtDateTime($start);
+						$end = FmtDateTime($end);
+						$start =~ s/-|:|\s//g;
+						$end =~ s/-|:|\s//g;
+						$start.= " $TimeLocaL_GMT_Diff";
+						$end.= " $TimeLocaL_GMT_Diff";
+
+						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start new        -> $start";
+						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
+					}
+
+					if ($cmd ne "loadEPG_Fav" && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
 						if ($cmd ne "loadEPG_today") {
 							$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
 						} else {
@@ -1223,12 +1253,28 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					}
 				}
 
-				$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/ && $ch_found != 0);             # title
-				$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0);  # subtitle
-				$desc = $2 if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0);                # desc
-				
-				if ($_ =~ /<\/programme>/ && $ch_found != 0) {   ## find end channel
-					$data_found = -1 if ($ch_name_before ne $ch_name);                                        # Reset bei Kanalwechsel
+				if ($_ =~ /<title lang="(.*)">(.*)<\/title>/) {
+					my $search = $2;
+					$search =~ s/\*/\\*/g;                           # mod for regex check
+					$title = $2 if ($ch_found != 0);                 # title
+					if (grep /$search/, @FavoriteShows_array) {
+						$title = $2;                                   # title
+						$title_wish = "yes";
+						$ch_found++;
+						Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | found FavoriteShow: $2";
+					}
+				}
+
+				if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/) {
+					$subtitle = $2 if ($ch_found != 0);  # subtitle
+				}
+
+				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/) {
+					$desc = $2 if ($ch_found != 0);                         # desc
+				}
+
+				if ($_ =~ /<\/programme>/ && $ch_found != 0) {            # find end channel
+					$data_found = -1 if ($ch_name_before ne $ch_name);      # Reset bei Kanalwechsel
 					$data_found++;
 					Log3 $name, 4, "#################################################";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name          -> $ch_name";
@@ -1259,6 +1305,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					my $mod_cnt;
 					($title, $subtitle, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v1($hash, $title, $subtitle, $desc);
 
+					$hash->{helper}{HTML}{$ch_name}{title_wish} = "yes" if ($title_wish);
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{start} = $start;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{end} = $end;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
@@ -1266,6 +1313,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{desc} = $desc;
 
+					### if modify JSON ###
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 Dumper: ".Dumper\$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found] if ($mod_cnt != 0);
 
 					$ch_found = 0;
@@ -1286,7 +1334,10 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | error, file $EPG_file_name no found at ./opt/fhem/FHEM/EPG";
 	}
 
-	my $json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML});
+	my $json_HTML;
+	$json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML}) if ($data_found != -1);
+	$json_HTML = "" if ($data_found == -1);
+
 	Log3 $name, 5, "$name: nonBlock_loadEPG_v1 value JSON for delivery: $json_HTML";
 	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
@@ -1307,7 +1358,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	delete($hash->{helper}{RUNNING_PID});
 
 	$json_HTML = eval {encode_utf8( $json_HTML )};
-	$HTML = eval { decode_json( $json_HTML ) };
+	$HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
 
 	if ($@) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
@@ -1523,64 +1574,6 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
-}
-
-#####################
-sub EPG_nonBlock_loadFav($) {
-	my ($string) = @_;
-	my ($name, $EPG_file_name, $cmd, $cmd2) = split("\\|", $string);
-  my $hash = $defs{$name};
-  my $return;
-
-	my $FavoriteShows = AttrVal($name, "FavoriteShows", undef);
-	my @FavoriteShows_array = split(";",$FavoriteShows) if ($FavoriteShows);
-
-  Log3 $name, 3, "$name: nonBlock_loadFav running, $cmd from file $EPG_file_name";
-
-	my $Fav_info = "";
-	my $json_HTML = "";
-
-	eval "use XML::LibXSLT;1" or $Fav_info .= "XML::LibXSLT failed ";
-	eval "use XML::LibXML;;1" or $Fav_info .= "XML::LibXML; failed ";
-
-	if ($Fav_info eq "") {
-		my $parser = XML::LibXML->new(  );
-		my $xslt = XML::LibXSLT->new(  );
-		my $EPG_file = "./FHEM/EPG/$EPG_file_name";
-	
-		if ( -e $EPG_file ) {
-		
-		my $stylesheet_string = <<'XML';
-
-XML
-
-			my $stylesheet = $xslt->parse_stylesheet_file( $stylesheet_string );
-			my $source_doc = $parser->parse_file( $EPG_file );
-			my $result = $stylesheet->transform( $source_doc );
-			$json_HTML = $stylesheet->output_string( $result );
-		} else {
-			$Fav_info = "EPG file for searching not found";
-		}
-	}
- 
-	$return = $name."|".$EPG_file_name."|".$Fav_info."|".$cmd."|".$json_HTML;
-	return $return;
-}
-
-#####################
-sub EPG_nonBlock_loadFavDone($) {
-	my ($string) = @_;
-	my ($name, $EPG_file_name, $Fav_info, $cmd, $json_HTML) = split("\\|", $string);
-  my $hash = $defs{$name};
-
-	Log3 $name, 3, "$name: nonBlock_loadFavDone running, $cmd from file $EPG_file_name";
-
-	if ($Fav_info ne "") {
-		readingsSingleUpdate($hash, "state", "ERROR: nonBlock_loadFavDone",1);
-	} else {
-		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,loadFavDone finish");	
-	}
 }
 
 #####################
