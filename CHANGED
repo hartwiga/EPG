@@ -1,5 +1,9 @@
 2019-12-13 - Update 66_EPG.pm
 
+- rename variable
+- fix cell spacing for f18 style
+2019-12-13 - Update 66_EPG.pm
+
 - fixed PERL WARNING: "my" variable $start masks earlier declaration in same scope
 2019-12-09 - Update 66_EPG.pm
 
