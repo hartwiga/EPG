@@ -14,8 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - ??? input EPG filtre s/["`;']//g;
-# - !!! Umlaute Readings
+# - f18style zusätzlicher Abstand Tabelle
 #
 # Features:
 # - definierbare CommandFunktion bei Onklick
@@ -476,7 +475,7 @@ sub EPG_FW_Detail($@) {
 		if ($FW_detail) {
 			### Control panel ###
 			$ret .= "<div class='makeTable wide'><span>".$EPG_tt->{"control_pan"}."</span>
-							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}' class='block wide'>
+							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}'>
 							<tr class='even'>";
 
 			$ret .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
@@ -663,24 +662,22 @@ sub EPG_FW_Popup_Channels {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Ch_sort = "";
 	my $checked = "";
-	my $style_background = "";
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
-	$ret.= "<table>";
-	$ret.= "<tr style=\"text-decoration-line: underline;\"><td>".$EPG_tt->{"no"}."</td><td>".$EPG_tt->{"active"}."</td><td>".$EPG_tt->{"tv_name"}."</td><td>".$EPG_tt->{"tv_fav"}."</td></tr>";
+	$ret.= "<div id=\"table_ch\"><table class=\"block wide\">";
+	$ret.= "<tr class=\"even\" style=\"text-decoration-line: underline;\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
-		$style_background = "background-color:#F0F0D8;" if ($i % 2 == 0);
-		$style_background = "" if ($i % 2 != 0);
 		$checked = "checked" if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0);
 		$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish} if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999);
-		$ret.= "<tr style=\"$style_background\"><td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
+		$ret.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
+		$ret.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
 		$checked = "";
 		$Ch_sort = "";
 	}
 
-	$ret.= "</table>";
+	$ret.= "</table></div>";
 
 	return $ret;
 }
