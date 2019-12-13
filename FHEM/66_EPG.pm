@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-09 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-13 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -575,14 +575,13 @@ sub EPG_FW_Detail($@) {
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 
 		if ($Ch_select && $cnt_ch != 0) {
-			my $start = "";
-			my $end = "";
-			my $start = "";
-			my $title = "";
-			my $subtitle = "";
-			my $desc = "";
 			my $cnt_infos = 0;
 			my $date;
+			my $desc = "";
+			my $end = "";
+			my $start = "";
+			my $subtitle = "";
+			my $title = "";
 
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 			$ret .= "<div id=\"table\"><table class=\"block wide\">";
