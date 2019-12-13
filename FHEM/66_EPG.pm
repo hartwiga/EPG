@@ -14,7 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - f18style zusätzlicher Abstand Tabelle
+# -
 #
 # Features:
 # - definierbare CommandFunktion bei Onklick
@@ -450,7 +450,7 @@ sub EPG_FW_Detail($@) {
 	my $Table_view_Subtitle = "";
 	my $cnt_ch_select = 0;
 	my $cnt_ch = 0;
-	my $ret = "";
+	my $html_site = "";
 	my $HTML_switch = 0;
 	my @Channels_value;
 
@@ -472,20 +472,35 @@ sub EPG_FW_Detail($@) {
 	}
 
 	if (scalar(@channel_available) > 0) {
+		### style via CSS for Checkbox ###
+		$html_site.= '<style>
+
+		/* all elements in table with id FW_table */
+		table#FW_table {
+
+		}
+
+		/* all td elements in table with id FW_table */		
+		table#FW_table td, th {
+			padding: 0px 5px 0px 5px;
+		}
+
+		</style>';
+
 		if ($FW_detail) {
 			### Control panel ###
-			$ret .= "<div class='makeTable wide'><span>".$EPG_tt->{"control_pan"}."</span>
+			$html_site .= "<div class='makeTable wide'><span>".$EPG_tt->{"control_pan"}."</span>
 							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}'>
 							<tr class='even'>";
 
-			$ret .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
-			$ret .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@channel_available) ."</td>";
-			$ret .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt_ch_select ."</td>";
-			$ret .= "</tr></table></div>";
+			$html_site .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
+			$html_site .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@channel_available) ."</td>";
+			$html_site .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt_ch_select ."</td>";
+			$html_site .= "</tr></table></div>";
 		}
 
 		### Javascript ###
-		$ret .= '
+		$html_site .= '
 			<script>
 
 			$( "#button1" ).click(function(e) {
@@ -558,8 +573,8 @@ sub EPG_FW_Detail($@) {
 		</script>';
 
 		### HTML ###
-		return $ret if ($Table eq "off");
-		$ret .= "<div><br></div>" if ($FW_detail eq "");
+		return $html_site if ($Table eq "off");
+		$html_site .= "<div><br></div>" if ($FW_detail eq "");
 
 		foreach my $d (keys %{$HTML}) {
 			if ($HTML->{$d}{EPG}) {
@@ -570,7 +585,7 @@ sub EPG_FW_Detail($@) {
 			}
 		}
 
-		$ret .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $cnt_ch != 0);
+		$html_site .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $cnt_ch != 0);
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 
 		if ($Ch_select && $cnt_ch != 0) {
@@ -583,16 +598,16 @@ sub EPG_FW_Detail($@) {
 			my $title = "";
 
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
-			$ret .= "<div id=\"table\"><table class=\"block wide\">";
+			$html_site .= "<div id=\"table\"><table id=\"FW_table\" class=\"block wide\">";
 
 			if ($HTML_switch == 0) { # other view if loadEPG_Fav
 				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
 				#Log3 $name, 3, "$name: FW_Detail sec:$sec, min:$min, hour:$hour, mday:$mday, mon:$mon, year:$year, wday:$wday, ydat:$ydat, isdst:$isdst";
 				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 
-				$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+				$html_site .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			} else {
-				$ret .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
+				$html_site .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
 			}
 
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
@@ -623,7 +638,7 @@ sub EPG_FW_Detail($@) {
 					}
 					$cnt_infos++;
 					## Darstellung als Link wenn Sendungsbeschreibung ##
-					$ret .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
+					$html_site .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
 					$Table_view_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 
 					if ($desc ne "") {
@@ -635,51 +650,51 @@ sub EPG_FW_Detail($@) {
 						$desc =~ s/[\r\'\"]/ /g;
 						$desc =~ s/[\n]|\\n/<br>/g;
 
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
-						$ret .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
+						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
+						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
 						### TEST ###
 						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
 						### TEST ###
 					} else {
-						$ret .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
-						$ret .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
+						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
+						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
 					}
 				}
 			}
-			$ret .= "</table></div>";			
+			$html_site .= "</table></div>";			
 		}
 	} else {
 		EPG_readingsDeleteChannel($hash);
 	}
 
-	return $ret;
+	return $html_site;
 }
 
 ##################### (PopUp to view HTML for available channels)
 sub EPG_FW_Popup_Channels {
 	my $name = shift;
-	my $ret = "";
+	my $html_site_ch = "";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Ch_sort = "";
 	my $checked = "";
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
-	$ret.= "<div id=\"table_ch\"><table class=\"block wide\">";
-	$ret.= "<tr class=\"even\" style=\"text-decoration-line: underline;\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
+	$html_site_ch.= "<div id=\"table_ch\"><table class=\"block wide\">";
+	$html_site_ch.= "<tr class=\"even\" style=\"text-decoration-line: underline;\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
 		$checked = "checked" if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0);
 		$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish} if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999);
-		$ret.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
-		$ret.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
+		$html_site_ch.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
+		$html_site_ch.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
 		$checked = "";
 		$Ch_sort = "";
 	}
 
-	$ret.= "</table></div>";
+	$html_site_ch.= "</table></div>";
 
-	return $ret;
+	return $html_site_ch;
 }
 
 ##################### (SAVE Button on PopUp -> Anpassung Attribute Channels)
