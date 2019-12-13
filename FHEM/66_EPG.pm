@@ -475,9 +475,9 @@ sub EPG_FW_Detail($@) {
 		### style via CSS for Checkbox ###
 		$html_site.= '<style>
 
-		/* all elements in table with id FW_table */
-		table#FW_table {
-
+		/* all elements in table with id EPG_InfoMenue */
+		table#EPG_InfoMenue td {
+			padding: 0px 5px 0px 5px;
 		}
 
 		/* all td elements in table with id FW_table */		
@@ -1268,11 +1268,12 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					my $search = $2;
 					$search =~ s/\*/\\*/g;                           # mod for regex check
 					$title = $2 if ($ch_found != 0);                 # title
-					if (grep /$search/, @FavoriteShows_array) {
+					if ((grep /$search/, @FavoriteShows_array) && ($start gt $TimeNow)) {
+						Log3 $name, 4, "#################################################";
+						Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | found FavoriteShow: $2";
 						$title = $2;                                   # title
 						$title_wish = "yes";
 						$ch_found++;
-						Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | found FavoriteShow: $2";
 					}
 				}
 
