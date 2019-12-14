@@ -1,5 +1,10 @@
 2019-12-14 - Update 66_EPG.pm
 
+- added some Hints to better understanding
+- added attrib EPG_auto_update to load new Data on room
+- revised commandref
+2019-12-14 - Update 66_EPG.pm
+
 - added buttons in room to change view
 2019-12-13 - Update 66_EPG.pm
 
