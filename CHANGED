@@ -1,3 +1,6 @@
+2019-12-14 - Update 66_EPG.pm
+
+- added buttons in room to change view
 2019-12-13 - Update 66_EPG.pm
 
 - fixed cmd loadEPG_Fav (older informations are not view)
