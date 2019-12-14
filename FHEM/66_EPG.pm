@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-14 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-15 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -14,7 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# -
+# - check define Sort in FAV and restart FHEM
 #
 # Features:
 # - definierbare CommandFunktion bei Onklick
@@ -58,16 +58,17 @@ my %EPG_transtable_EN = (
 		"btn_now"             =>  "Now",
 		"btn_prime"           =>  "PrimeTime",
 		"control_pan_btn"     =>  "list of all available channels",
+    "FW_autoload"         =>  "Data is being updated automatically",
     "broadcast"           =>  "Broadcast",
     "channel"             =>  "Channel",
     "control_pan"         =>  "Control panel",
+    "date"                =>  "Date",
     "description"         =>  "Description",
     "end"                 =>  "End",
     "epg_info"            =>  "no EPG Data",
     "read_ch"             =>  "readed channels",
     "select_ch"           =>  "selected channels",
     "start"               =>  "Start",
-    "date"                =>  "Date",
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "active",
     "no"                  =>  "no.",
@@ -77,14 +78,14 @@ my %EPG_transtable_EN = (
     "set_Attr_Ch_eq"      =>  "no channel selected",
     "set_Attr_Ch_state"   =>  "EPG available with get loadEPG command",
 		## EPG_ParseHttpResponse ##
-    "ParseHttp_state1"    =>  "no information received",
-		"ParseHttp_state2"    =>  "downloading not finish in the maximum time from HTTP_TimeOut",
-		"ParseHttp_state_ok"  =>  "data received",
-		"ParseHttp_gz_error"  =>  "ERROR: unpack gz failed,",
-		"ParseHttp_xz_error"  =>  "ERROR: unpack xz failed,",
-		"ParseHttp_Http_ok"   =>  "downloaded",
 		"ParseHttp_Http_URL"  =>  "DownloadURL was not found",
 		"ParseHttp_Http_file" =>  "DownloadFile was not found on URL",
+		"ParseHttp_Http_ok"   =>  "downloaded",
+		"ParseHttp_gz_error"  =>  "ERROR: unpack gz failed,",
+		"ParseHttp_state2"    =>  "downloading not finish in the maximum time from HTTP_TimeOut",
+		"ParseHttp_state_ok"  =>  "data received",
+		"ParseHttp_xz_error"  =>  "ERROR: unpack xz failed,",
+    "ParseHttp_state1"    =>  "no information received",
 		## EPG_File_check ##
 		"File_check_fileage"  =>  "unknown",
 		"File_check_DownFile" =>  "file not found",
@@ -134,16 +135,17 @@ my %EPG_transtable_EN = (
 		"btn_now"             =>  "derzeit",
 		"btn_prime"           =>  "PrimeTime",
 		"control_pan_btn"     =>  "Liste der verfügbaren Kanäle",
+    "FW_autoload"         =>  "Daten werden gerade automatisch aktualisiert",
     "broadcast"           =>  "Sendung",
     "channel"             =>  "Sender",
     "control_pan"         =>  "Bedienfeld",
+    "date"                =>  "Datum",
     "description"         =>  "Beschreibung",
     "end"                 =>  "Ende",
     "epg_info"            =>  "keine EPG Daten",
     "read_ch"             =>  "eingelesene Kanäle",
     "select_ch"           =>  "ausgewählte Kanäle",
     "start"               =>  "Start",
-    "date"                =>  "Datum",
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "aktiv",
     "no"                  =>  "Nr.",
@@ -153,14 +155,14 @@ my %EPG_transtable_EN = (
     "set_Attr_Ch_eq"      =>  "keinen Kanal ausgewählt",
     "set_Attr_Ch_state"   =>  "EPG verfügbar mit dem Befehl get loadEPG",
 		## EPG_ParseHttpResponse ##
-    "ParseHttp_state1"    =>  "keine Informationen erhalten",
-		"ParseHttp_state2"    =>  "Der Download ist nicht in der maximalen Zeit von HTTP_TimeOut beendet.",
-		"ParseHttp_state_ok"  =>  "Daten empfangen",
-		"ParseHttp_gz_error"  =>  "ERROR: unpack gz fehlgeschlagen,",
-		"ParseHttp_xz_error"  =>  "ERROR: unpack xz fehlgeschlagen,",
-		"ParseHttp_Http_ok"   =>  "heruntergeladen",
 		"ParseHttp_Http_URL"  =>  "DownloadURL wurde nicht gefunden",
 		"ParseHttp_Http_file" =>  "DownloadFile wurde in der URL nicht gefunden",
+		"ParseHttp_Http_ok"   =>  "heruntergeladen",
+		"ParseHttp_gz_error"  =>  "ERROR: unpack gz fehlgeschlagen,",
+		"ParseHttp_state2"    =>  "Der Download ist nicht in der maximalen Zeit von HTTP_TimeOut beendet.",
+		"ParseHttp_state_ok"  =>  "Daten empfangen",
+		"ParseHttp_xz_error"  =>  "ERROR: unpack xz fehlgeschlagen,",
+    "ParseHttp_state1"    =>  "keine Informationen erhalten",
 		## EPG_File_check ##
 		"File_check_fileage"  =>  "unbekannt",
 		"File_check_DownFile" =>  "Datei nicht gefunden",
@@ -209,6 +211,7 @@ sub EPG_Initialize($) {
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
 	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
+																		"EPG_auto_update:yes,no ".
 																		"FavoriteShows ".
                                     "Table:on,off Table_view_Subtitle:no,yes disable ".
                                     "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
@@ -267,7 +270,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191214";
+	$hash->{VERSION} = "20191215";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -327,6 +330,8 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "loadFile") {
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
+
 		EPG_PerformHttpRequest($hash);
 		return undef;
 	}
@@ -335,6 +340,8 @@ sub EPG_Get($$$@) {
 		Log3 $name, 4, "$name: get $cmd - starting File_check";
 		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
+
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		@channel_available = ();
 
@@ -365,8 +372,15 @@ sub EPG_Get($$$@) {
 		}
 
 		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
- 			$HTML = {};
-			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
+			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
+
+			$HTML = {};
+			if ($hash->{helper}{autoload} && $hash->{helper}{autoload} eq "yes") {
+				delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));			
+			} else {
+				readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);						
+			}
+
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
@@ -461,6 +475,7 @@ sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my $HTML_switch = 0;
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
@@ -478,7 +493,7 @@ sub EPG_FW_Detail($@) {
     $EPG_tt = \%EPG_transtable_EN;
   }
 
-	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table, language=$lang)";
+	Log3 $name, 4, "$name: FW_Detail is running (Tableview=$Table, language=$lang)";
 	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
 
 	if ($Ch_select) {
@@ -618,7 +633,6 @@ sub EPG_FW_Detail($@) {
 		}
 
 		$html_site .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $cnt_ch != 0);
-
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 
 		if ($Ch_select && $cnt_ch != 0) {
@@ -637,6 +651,34 @@ sub EPG_FW_Detail($@) {
 				$html_site .= "<INPUT type=\"reset\" onclick=\"pushed_button('now')\" value=\"".$EPG_tt->{"btn_now"}."\"/> <INPUT type=\"reset\" onclick=\"pushed_button('prime')\" value=\"".$EPG_tt->{"btn_prime"}."\"/>";
 				$html_site .= "<INPUT type=\"reset\" onclick=\"pushed_button('favorite')\" value=\"".$EPG_tt->{"btn_fav"}."\"/>" if (AttrVal($name, "FavoriteShows", undef));
 				$html_site .= "</div>";			
+
+				### check, old value to must reload ### 
+				if ($EPG_auto_update eq "yes") {
+					my $TimeNow = FmtDateTime(time());
+					$TimeNow =~ s/-|:|\s//g;
+					my $reload = 0;
+
+					Log3 $name, 4, "$name: FW_Detail - look for old data";
+					foreach my $ch (sort keys %{$HTML}) {
+						for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+							if (substr($HTML->{$ch}{EPG}[$i]{end},0,-6) lt $TimeNow) {
+								Log3 $name, 4, "$name: FW_Detail - found old data, $ch with end ".$HTML->{$ch}{EPG}[$i]{end};
+								$reload++;
+								$HTML = {};
+								last;
+							}
+							last if ($reload != 0);
+						}
+						last if ($reload != 0);
+					}
+
+					if ($reload != 0) {
+						$hash->{helper}{autoload} = "yes";
+						readingsSingleUpdate($hash, "state" , $EPG_tt->{"FW_autoload"}, 1);
+						CommandGet($hash, "$name loadEPG_now");
+						return "";
+					}
+				}
 			}
 
 			$html_site .= "<div id=\"table\"><table id=\"FW_table\" class=\"block wide\">";
@@ -976,6 +1018,11 @@ sub EPG_Undef($$) {
 
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
+
+	delete $hash->{helper}{programm} if(defined($hash->{helper}{programm}));
+	delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
+	delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
+
 	return undef;
 }
 
@@ -1122,8 +1169,9 @@ sub EPG_nonBlock_available_channelsDone($) {
   my $hash = $defs{$name};
 	my $ch_table = "";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
-
+	
 	return unless(defined($string));
   Log3 $name, 4, "$name: nonBlock_available_channelsDone running";
   Log3 $name, 5, "$name: nonBlock_available_channelsDone string=$string";
@@ -1170,9 +1218,13 @@ sub EPG_nonBlock_available_channelsDone($) {
 	$hash->{helper}{programm} = $ch_table;
 	CommandAttr($hash,"$name Variant $Variant") if ($Variant ne "unknown");
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
-	
+
 	if (AttrVal($name, "Ch_select", undef)) {
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK"});
+		if ($EPG_auto_update ne "yes") {
+			InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK"});		
+		} else {
+			CommandGet($hash, "$name loadEPG_now") if ($Variant ne "teXXas_RSS");
+		}
 	} else {
 		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK2"});
 	}
@@ -1874,6 +1926,9 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
+	<ul><li><a name="EPG_auto_update">EPG_auto_update</a><br>
+	This enables the automatic update of the view data in the front end. The setting is effective for a FHEM restart, where the data is loaded immediately or when you click on the room view.
+	The attribute has no influence on the detailed view. (yes | no = default)</a></ul><br>
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Names of programs which are searched for separately. (values ​​must be separated by a semicolon)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
@@ -1974,6 +2029,9 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
+	<ul><li><a name="EPG_auto_update">EPG_auto_update</a><br>
+	Hiermit kann die automatische Aktualisierung der Ansichtsdaten im FrontEnd aktiviert werden. Die Einstellung wirkt bei einem FHEM Restart, wo sofort die Daten geladen werden oder
+	bei einem Klick auf die Raumansicht. Auf die Detailansicht hat das Attribut keinen Einfluss. (yes | no = default)</a></ul><br>
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Namen von Sendungen welche gezielt gesucht werden k&ouml;nnen. (mehrere Werte m&uuml;ssen durch ein Semikolon getrennt werden)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
