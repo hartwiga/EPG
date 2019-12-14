@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-13 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-14 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -54,6 +54,9 @@ my %EPG_transtable_EN = (
 		"get_available_ch"    =>  "available_channels search",
 		"get_loadEPG"         =>  "accomplished",
 		## EPG_FW_Detail ##
+		"btn_fav"             =>  "FavoriteShow",
+		"btn_now"             =>  "Now",
+		"btn_prime"           =>  "PrimeTime",
 		"control_pan_btn"     =>  "list of all available channels",
     "broadcast"           =>  "Broadcast",
     "channel"             =>  "Channel",
@@ -127,6 +130,9 @@ my %EPG_transtable_EN = (
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
 		"get_loadEPG"         =>  "angenommen",
 		## EPG_FW_Detail ##
+		"btn_fav"             =>  "Lieblingssendung",
+		"btn_now"             =>  "derzeit",
+		"btn_prime"           =>  "PrimeTime",
 		"control_pan_btn"     =>  "Liste der verfügbaren Kanäle",
     "broadcast"           =>  "Sendung",
     "channel"             =>  "Sender",
@@ -261,7 +267,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191209";
+	$hash->{VERSION} = "20191214";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -368,7 +374,8 @@ sub EPG_Get($$$@) {
 		}
 
 		if ($cmd eq "loadEPG_Fav") {
-			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
+			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
+			Log3 $name, 4, "$name: get $cmd - looking for favorite shows with $Variant";
 
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
@@ -427,7 +434,10 @@ sub EPG_Attr() {
 			return "to small (standard 10)" if ($attrValue < 5);
 			return "to long (standard 10)" if ($attrValue > 90);
 		}
-	
+
+		if ($attrName eq "FavoriteShows") {
+			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+		}
 	}
 	
 	if ($cmd eq "del") {
@@ -435,8 +445,13 @@ sub EPG_Attr() {
 			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
 			return undef;
 		}
+
 		if ($attrName eq "Ch_Info_to_Reading") {
 			EPG_readingsDeleteChannel($hash);
+		}
+
+		if ($attrName eq "FavoriteShows") {
+			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 		}
 	}
 }
@@ -446,12 +461,13 @@ sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
+	my $HTML_switch = 0;
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
-	my $cnt_ch_select = 0;
+	my $Variant = AttrVal($name, "Variant", undef);
 	my $cnt_ch = 0;
+	my $cnt_ch_select = 0;
 	my $html_site = "";
-	my $HTML_switch = 0;
 	my @Channels_value;
 
   ## readjust language ##
@@ -474,6 +490,18 @@ sub EPG_FW_Detail($@) {
 	if (scalar(@channel_available) > 0) {
 		### style via CSS for Checkbox ###
 		$html_site.= '<style>
+
+		/* all elements in div with id btn_table */
+		#btn_table {
+			text-align: center;
+			padding: 10px 0px 10px 0px;
+		}
+
+		#btn_table input[type="reset"] {
+			border-radius: 4px 4px 4px 4px;
+			margin: 0px 15px 0px 15px;
+			width: 150px;
+		}
 
 		/* all elements in table with id EPG_InfoMenue */
 		table#EPG_InfoMenue td {
@@ -570,11 +598,15 @@ sub EPG_FW_Detail($@) {
 				}
 			}
 
+			/* FW_detail Buttons */			
+			function pushed_button(txt) {
+				FW_cmd(FW_root+ \'?XHR=1"'.$FW_CSRF.'"&cmd={EPG_FW_pushed_button("'.$name.'","\'+txt+\'")}\');
+			}
+
 		</script>';
 
 		### HTML ###
 		return $html_site if ($Table eq "off");
-		$html_site .= "<div><br></div>" if ($FW_detail eq "");
 
 		foreach my $d (keys %{$HTML}) {
 			if ($HTML->{$d}{EPG}) {
@@ -586,6 +618,7 @@ sub EPG_FW_Detail($@) {
 		}
 
 		$html_site .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $cnt_ch != 0);
+
 		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 
 		if ($Ch_select && $cnt_ch != 0) {
@@ -598,6 +631,14 @@ sub EPG_FW_Detail($@) {
 			my $title = "";
 
 			$Table_view_Subtitle = "<th>".$EPG_tt->{"description"}."</th>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
+
+			if ($FW_detail eq "" && $Variant && $Variant ne "teXXas_RSS") {
+				$html_site .= "<div id=\"btn_table\">";
+				$html_site .= "<INPUT type=\"reset\" onclick=\"pushed_button('now')\" value=\"".$EPG_tt->{"btn_now"}."\"/> <INPUT type=\"reset\" onclick=\"pushed_button('prime')\" value=\"".$EPG_tt->{"btn_prime"}."\"/>";
+				$html_site .= "<INPUT type=\"reset\" onclick=\"pushed_button('favorite')\" value=\"".$EPG_tt->{"btn_fav"}."\"/>" if (AttrVal($name, "FavoriteShows", undef));
+				$html_site .= "</div>";			
+			}
+
 			$html_site .= "<div id=\"table\"><table id=\"FW_table\" class=\"block wide\">";
 
 			if ($HTML_switch == 0) { # other view if loadEPG_Fav
@@ -742,6 +783,19 @@ sub EPG_FW_set_Attr_Channels {
 		readingsSingleUpdate($hash, "state" , $EPG_tt->{"set_Attr_Ch_state"}, 1);
 	}
 	#Log3 $name, 5, "$name: FW_set_Attr_Channels ".Dumper\$HTML;
+}
+
+##################### (SAVE Button on PopUp -> Anpassung Attribute Channels)
+sub EPG_FW_pushed_button {
+	my $name = shift;
+	my $command = shift;
+	my $hash = $defs{$name};
+
+	Log3 $name, 4, "$name: FW_pushed_button is running";
+
+	CommandGet($hash, "$name loadEPG_now") if ($command eq "now");
+	CommandGet($hash, "$name loadEPG_Prime") if ($command eq "prime");
+	CommandGet($hash, "$name loadEPG_Fav") if ($command eq "favorite");
 }
 
 #####################
@@ -1268,6 +1322,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					my $search = $2;
 					$search =~ s/\*/\\*/g;                           # mod for regex check
 					$title = $2 if ($ch_found != 0);                 # title
+					## looking for favorite´s ##
 					if ((grep /$search/, @FavoriteShows_array) && ($start gt $TimeNow)) {
 						Log3 $name, 4, "#################################################";
 						Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | found FavoriteShow: $2";
@@ -1419,7 +1474,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		}
 	}
 
-	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
 }
 
