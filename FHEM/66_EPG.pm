@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-15 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-18 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -53,6 +53,7 @@ my %EPG_transtable_EN = (
 		## EPG_Get ##
 		"get_available_ch"    =>  "available_channels search",
 		"get_loadEPG"         =>  "accomplished",
+		"Notify_auto_msg"     =>  "automatic process",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "FavoriteShow",
 		"btn_now"             =>  "Now",
@@ -130,6 +131,7 @@ my %EPG_transtable_EN = (
 		## EPG_Get ##
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
 		"get_loadEPG"         =>  "angenommen",
+		"Notify_auto_msg"     =>  "automatischer Prozess",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "Lieblingssendung",
 		"btn_now"             =>  "derzeit",
@@ -270,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191215";
+	$hash->{VERSION} = "20191218";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -330,7 +332,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "loadFile") {
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 
 		EPG_PerformHttpRequest($hash);
 		return undef;
@@ -341,7 +343,7 @@ sub EPG_Get($$$@) {
 		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
 
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
+		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		@channel_available = ();
 
@@ -372,7 +374,7 @@ sub EPG_Get($$$@) {
 		}
 
 		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
-			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: automatic process $cmd' , 5000)", "");
+			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 
 			$HTML = {};
 			if ($hash->{helper}{autoload} && $hash->{helper}{autoload} eq "yes") {
@@ -1371,16 +1373,19 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				}
 
 				if ($_ =~ /<title lang="(.*)">(.*)<\/title>/) {
-					my $search = $2;
-					$search =~ s/\*/\\*/g;                           # mod for regex check
 					$title = $2 if ($ch_found != 0);                 # title
+
 					## looking for favorite´s ##
-					if ((grep /$search/, @FavoriteShows_array) && ($start gt $TimeNow)) {
-						Log3 $name, 4, "#################################################";
-						Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | found FavoriteShow: $2";
-						$title = $2;                                   # title
-						$title_wish = "yes";
-						$ch_found++;
+					if (scalar(@FavoriteShows_array) > 0 && ($start gt $TimeNow)) {
+						for (my $i=0;$i<@FavoriteShows_array;$i++) {
+							if (grep /\Q$FavoriteShows_array[$i]\E/, $2) {
+								Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | FavoriteShow, $FavoriteShows_array[$i] found";
+								Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | FavoriteShow, $2";
+								$title = $2;                                   # title
+								$title_wish = "yes";
+								$ch_found++;
+							}
+						}
 					}
 				}
 
