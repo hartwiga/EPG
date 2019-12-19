@@ -1,3 +1,6 @@
+2019-12-19 - Update 66_EPG.pm
+
+- fix Ch_sort after restart FHEM and run command aviable channels
 2019-12-18 - Update 66_EPG.pm
 
 - fix FavoriteShows option
