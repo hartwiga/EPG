@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-18 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-19 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -14,7 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# - check define Sort in FAV and restart FHEM
+# -
 #
 # Features:
 # - definierbare CommandFunktion bei Onklick
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191218";
+	$hash->{VERSION} = "20191219";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -760,8 +760,11 @@ sub EPG_FW_Popup_Channels {
 	my $name = shift;
 	my $html_site_ch = "";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
-	my $Ch_sort = "";
+	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
+	my @Ch_sort = split(",",$Ch_sort) if (AttrVal($name, "Ch_sort", undef));
+	$Ch_sort = "";
 	my $checked = "";
+	my $checked_cnt = -1;
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
@@ -769,8 +772,16 @@ sub EPG_FW_Popup_Channels {
 	$html_site_ch.= "<tr class=\"even\" style=\"text-decoration-line: underline;\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
-		$checked = "checked" if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0);
-		$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish} if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999);
+		if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0) {
+			$checked_cnt++;
+			$checked = "checked";
+			if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999) {
+				$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish};
+			} else {
+				$Ch_sort = $Ch_sort[$checked_cnt] if ($Ch_sort[$checked_cnt] && $Ch_sort[$checked_cnt] ne 0);
+			}
+		}
+
 		$html_site_ch.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
 		$html_site_ch.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
 		$checked = "";
