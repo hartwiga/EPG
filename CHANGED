@@ -1,3 +1,8 @@
+2019-12-21 - Update 66_EPG.pm
+
+- revised code for HTML style to css format
+- added function, old station information is grayed out (if user no automatic load option)
+- added function, EPG_auto_download (if user settings to yes, if there is absolutely no more information, a download is initiated, now test it!)
 2019-12-19 - Update 66_EPG.pm
 
 - fix Ch_sort after restart FHEM and run command aviable channels
