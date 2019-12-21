@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-19 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-21 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -213,7 +213,7 @@ sub EPG_Initialize($) {
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
 	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
-																		"EPG_auto_update:yes,no ".
+																		"EPG_auto_download:yes,no EPG_auto_update:yes,no ".
 																		"FavoriteShows ".
                                     "Table:on,off Table_view_Subtitle:no,yes disable ".
                                     "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191219";
+	$hash->{VERSION} = "20191221";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -478,7 +478,7 @@ sub EPG_FW_Detail($@) {
 	my $hash = $defs{$name};
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
-	my $HTML_switch = 0;
+	my $HTML_Fav = 0;
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
 	my $Variant = AttrVal($name, "Variant", undef);
@@ -525,9 +525,27 @@ sub EPG_FW_Detail($@) {
 			padding: 0px 5px 0px 5px;
 		}
 
-		/* all td elements in table with id FW_table */		
-		table#FW_table td, th {
+		/* all td,th elements in div table with id FW_Detail */		
+		table#FW_Detail td, th {
 			padding: 0px 5px 0px 5px;
+		}
+
+		/* all th elements in div table with id FW_Detail */		
+		table#FW_Detail th {
+			text-decoration:underline;
+			text-align:left;
+		}
+
+		/* all th elements in div with id FW_Popup_Channels */
+		#FW_Popup_Channels th {
+			text-decoration:underline;
+			text-align:left;
+		}
+		
+		/* all elements in div with class oldinfo | transparent */
+		.oldinfo {
+			opacity: 0.2;
+			filter: alpha(opacity=2); /* For IE8 and earlier */
 		}
 
 		</style>';
@@ -629,7 +647,7 @@ sub EPG_FW_Detail($@) {
 			if ($HTML->{$d}{EPG}) {
 				$cnt_ch++;
 				Log3 $name, 5, "$name: FW_Detail - found information for channel ".$d;
-				$HTML_switch++ if (exists $HTML->{$d}{title_wish});
+				$HTML_Fav++ if (exists $HTML->{$d}{title_wish});
 				#Log3 $name, 5, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 			}
 		}
@@ -642,6 +660,7 @@ sub EPG_FW_Detail($@) {
 			my $date;
 			my $desc = "";
 			my $end = "";
+			my $end_timstamp = "";
 			my $start = "";
 			my $subtitle = "";
 			my $title = "";
@@ -683,23 +702,22 @@ sub EPG_FW_Detail($@) {
 				}
 			}
 
-			$html_site .= "<div id=\"table\"><table id=\"FW_table\" class=\"block wide\">";
+			$html_site .= "<div id=\"table\"><table id=\"FW_Detail\" class=\"block wide\">";
 
-			if ($HTML_switch == 0) { # other view if loadEPG_Fav
+			## HTML view normal ##
+			if ($HTML_Fav == 0) {
 				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
-				#Log3 $name, 3, "$name: FW_Detail sec:$sec, min:$min, hour:$hour, mday:$mday, mon:$mon, year:$year, wday:$wday, ydat:$ydat, isdst:$isdst";
 				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
-
-				$html_site .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
+			## HTML view for FavoriteShow ##
 			} else {
-				$html_site .= "<tr class=\"even\" style=\"text-decoration:underline; text-align:left;\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
+				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
 			}
 
 			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
 
 			foreach my $ch (@positioned) {
 				## Kanäle ##
-				#Log3 $name, 3, "$name: ch                -> $ch (".$HTML->{$ch}{ch_wish}.")";
 				foreach my $value (@{$HTML->{$ch}{EPG}}) {
 					## EPG ##
 					#Log3 $name, 3, "$name: value             -> $value";
@@ -716,37 +734,44 @@ sub EPG_FW_Detail($@) {
 							$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 						}
 
-						$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2) if ($d eq "end");
+						if ($d eq "end") {
+							$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2);
+
+							my ($sec,$min,$hour,$mday,$mon,$year) = (substr($value->{$d},12,2),substr($value->{$d},10,2),substr($value->{$d},8,2),substr($value->{$d},6,2),substr($value->{$d},4,2) - 1,substr($value->{$d},0,4) - 1900);
+							my $timestamp = fhemTimeLocal($sec, $min, $hour, $mday, $mon, $year);
+							$end_timstamp = $timestamp;
+						}
 						$title = $value->{$d} if ($d eq "title");
 						$desc = $value->{$d} if ($d eq "desc");
 						$subtitle = $value->{$d} if ($d eq "subtitle");
 					}
 					$cnt_infos++;
-					## Darstellung als Link wenn Sendungsbeschreibung ##
-					$html_site .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
+
+					## check HMT information old ? ##
+					if ( (($end_timstamp * 1 - time()) < 0) && $EPG_auto_update eq "no") {
+						Log3 $name, 4, "$name: FW_Detail - information channel $ch are old | Broadcast already ended $end_timstamp";
+						$html_site .= sprintf("<tr class=\"%s oldinfo\">", ($cnt_infos & 1)?"odd":"even");
+					} else {
+						$html_site .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
+					}
 					$Table_view_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 
+					## Darstellung als Link wenn Sendungsbeschreibung ##
 					if ($desc ne "") {
-						#$desc =~ s/"/&quot;/g if (grep /"/, $desc);  # "
-						#$desc =~ s/'/\\'/g if (grep /'/, $desc);     # '
-
 						$desc =~ s/<br>/\n/g;
 						$desc =~ s/(.{1,65}|\S{66,})(?:\s[^\S\r\n]*|\Z)/$1<br>/g; 
 						$desc =~ s/[\r\'\"]/ /g;
 						$desc =~ s/[\n]|\\n/<br>/g;
 
-						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
-						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
-						### TEST ###
-						#$ret .= "<td>".FW_makeImage('tvmovie/tvlogo_ard_b')."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>";
-						### TEST ###
+						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
+						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
 					} else {
-						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch == 0);
-						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_switch != 0);
+						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
+						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
 					}
 				}
 			}
-			$html_site .= "</table></div>";			
+			$html_site .= "</table></div>";
 		}
 	} else {
 		EPG_readingsDeleteChannel($hash);
@@ -768,8 +793,8 @@ sub EPG_FW_Popup_Channels {
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
-	$html_site_ch.= "<div id=\"table_ch\"><table class=\"block wide\">";
-	$html_site_ch.= "<tr class=\"even\" style=\"text-decoration-line: underline;\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
+	$html_site_ch.= "<div><table id=\"FW_Popup_Channels\" class=\"block wide\">";
+	$html_site_ch.= "<tr class=\"even\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
 	for (my $i=0; $i<scalar(@channel_available); $i++) {
 		if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0) {
@@ -1484,6 +1509,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
+	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
@@ -1494,6 +1520,13 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
+
+	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done found ".scalar(keys %{$HTML})." broadcast information";
+	if (scalar(keys %{$HTML}) <= 0 && $EPG_auto_download eq "yes") {
+		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done found 0 broadcast information, process automatic download started";
+		CommandGet($hash, "$name loadFile");
+		return undef;
+	}
 
 	if ($@) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
@@ -1942,6 +1975,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	File name of the desired file containing the information.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Website URL where the desired file is stored.</li><a name=" "></a></ul><br>
+	<ul><li><a name="EPG_auto_download">EPG_auto_download</a><br>
+	This enables the automatic download of the EPG file to be activated.<br>As soon as absolutely no EPG information is available, a new download is initiated. (yes | no = default)</a></ul><br>
 	<ul><li><a name="EPG_auto_update">EPG_auto_update</a><br>
 	This enables the automatic update of the view data in the front end. The setting is effective for a FHEM restart, where the data is loaded immediately or when you click on the room view.
 	The attribute has no influence on the detailed view. (yes | no = default)</a></ul><br>
@@ -2045,6 +2080,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	Dateiname von der gew&uuml;nschten Datei welche die Informationen enth&auml;lt.</li><a name=" "></a></ul><br>
 	<ul><li><a name="DownloadURL">DownloadURL</a><br>
 	Webseiten URL wo die gew&uuml;nschten Datei hinterlegt ist.</li><a name=" "></a></ul><br>
+	<ul><li><a name="EPG_auto_download">EPG_auto_download</a><br>
+	Hiermit kann der automatische Download der EPG Datei aktiviert werden.<br>Sobald absolut keine EPG Informationen zur Verfügung stehen, wird ein neuer Download angestoßen. (yes | no = default)</a></ul><br>
 	<ul><li><a name="EPG_auto_update">EPG_auto_update</a><br>
 	Hiermit kann die automatische Aktualisierung der Ansichtsdaten im FrontEnd aktiviert werden. Die Einstellung wirkt bei einem FHEM Restart, wo sofort die Daten geladen werden oder
 	bei einem Klick auf die Raumansicht. Auf die Detailansicht hat das Attribut keinen Einfluss. (yes | no = default)</a></ul><br>
