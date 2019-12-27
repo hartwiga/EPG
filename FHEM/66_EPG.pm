@@ -1820,13 +1820,13 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
-			if ($values[$i] =~ /\\s/) {
+			if ($values[$i] =~ /\\\s/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
 					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\ <-';
 					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
-				$values[$i] =~ s/\\s/\\\s/g;
+				$values[$i] =~ s/\\\s/\\\\ /g;
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
