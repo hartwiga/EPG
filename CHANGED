@@ -1,3 +1,7 @@
+2019-12-27 - Update 66_EPG.pm
+
+- added some FTUI Syntax in HTML
+- added one more syntax check for error in JSON
 2019-12-21 - Update 66_EPG.pm
 
 - revised code for HTML style to css format
