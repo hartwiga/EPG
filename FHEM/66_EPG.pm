@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-21 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2019-12-27 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191221";
+	$hash->{VERSION} = "20191227";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -505,6 +505,12 @@ sub EPG_FW_Detail($@) {
 	}
 
 	if (scalar(@channel_available) > 0) {
+		### Tablet_UI ###
+		$html_site.= '<!DOCTYPE html>';
+		$html_site.= '<html>';
+		$html_site.= '<head></head>';
+		$html_site.= '<body>';
+
 		### style via CSS for Checkbox ###
 		$html_site.= '<style>
 
@@ -641,7 +647,12 @@ sub EPG_FW_Detail($@) {
 		</script>';
 
 		### HTML ###
-		return $html_site if ($Table eq "off");
+		if ($Table eq "off") {
+			### Tablet_UI ###
+			$html_site.= '</body>';
+			$html_site.= '</html>';
+			return $html_site;
+		}
 
 		foreach my $d (keys %{$HTML}) {
 			if ($HTML->{$d}{EPG}) {
@@ -772,6 +783,10 @@ sub EPG_FW_Detail($@) {
 				}
 			}
 			$html_site .= "</table></div>";
+
+			### Tablet_UI ###
+			$html_site.= '</body>';
+			$html_site.= '</html>';
 		}
 	} else {
 		EPG_readingsDeleteChannel($hash);
@@ -1529,6 +1544,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 
 	if ($@) {
+		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done, Please report it to the developer with the following line!";
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done decode_json failed: ".$@;
 
 		readingsBeginUpdate($hash);
@@ -1797,10 +1813,20 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 			if ($values[$i] =~ /\s\\\s/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
-					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'-> \ <-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'-> \\ <-';
 					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
 				}
 				$values[$i] =~ s/\s\\\s/ /g;
+				$mod_cnt++;
+				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+			}
+			if ($values[$i] =~ /\\s/) {
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\ <-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/\\s/\\\s/g;
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
