@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2019-12-27 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-05 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -211,7 +211,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no ".
+	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no Ch_Commands:textField-long ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
 																		"EPG_auto_download:yes,no EPG_auto_update:yes,no ".
 																		"FavoriteShows ".
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20191227";
+	$hash->{VERSION} = "20200105";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -454,6 +454,12 @@ sub EPG_Attr() {
 		if ($attrName eq "FavoriteShows") {
 			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 		}
+
+		if ($attrName eq "Ch_Commands") {
+			return "ERROR: The command must informat { \" \" => \" \" }" if ($attrValue !~ /\s?+{\X+=>\X+}/);
+			my $err = perlSyntaxCheck($attrValue, ());   # check PERL Code
+			return $err if($err);
+		}
 	}
 	
 	if ($cmd eq "del") {
@@ -476,6 +482,7 @@ sub EPG_Attr() {
 sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
+	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my $HTML_Fav = 0;
@@ -654,6 +661,26 @@ sub EPG_FW_Detail($@) {
 			return $html_site;
 		}
 
+		## Ch_Commands check and sort in ##
+		if ($Ch_Commands) {
+      if( $Ch_Commands =~ m/^\{.*\}$/s && $Ch_Commands =~ m/=>/ && $Ch_Commands !~ m/\$/ ) {
+        my $av = eval $Ch_Commands;
+        if( $@ ) {
+          Log3 $name, 3, "$name: FW_Detail - Ch_Command, ERROR: ". $@;
+        } else {
+          $Ch_Commands = $av if( ref($av) eq "HASH" );
+        }
+      }
+      $hash->{helper}{Ch_Commands} = $Ch_Commands;
+
+			foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
+				if (exists $HTML->{$d}) {
+					$HTML->{$d}{Ch_Command} = $hash->{helper}{Ch_Commands}{$d};
+					Log3 $name, 4, "$name: FW_Detail - Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+				}
+			}
+		}
+		
 		foreach my $d (keys %{$HTML}) {
 			if ($HTML->{$d}{EPG}) {
 				$cnt_ch++;
@@ -767,6 +794,14 @@ sub EPG_FW_Detail($@) {
 					}
 					$Table_view_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 
+					## onclick Kanal wenn Kommando vorhanden ##
+					my $click_ch;
+					if (exists $HTML->{$ch}{Ch_Command}) {
+						$click_ch = "<a href=\"#!\" onclick=\"FW_cmd('/fhem?XHR=1&cmd=$HTML->{$ch}{Ch_Command}')\">$ch</a>";
+					} else {
+						$click_ch = "$ch";
+					}
+
 					## Darstellung als Link wenn Sendungsbeschreibung ##
 					if ($desc ne "") {
 						$desc =~ s/<br>/\n/g;
@@ -774,11 +809,11 @@ sub EPG_FW_Detail($@) {
 						$desc =~ s/[\r\'\"]/ /g;
 						$desc =~ s/[\n]|\\n/<br>/g;
 
-						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
-						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
+						$html_site .= "<td>$click_ch</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
+						$html_site .= "<td>$click_ch</td><td>".$date."</td><td>$start</td><td>$end</td><td><a href=\"#!\" onclick=\"FW_okDialog(\'$desc\')\">$title</a></td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
 					} else {
-						$html_site .= "<td>$ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
-						$html_site .= "<td>$ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
+						$html_site .= "<td>$click_ch</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav == 0);
+						$html_site .= "<td>$click_ch</td><td>".$date."</td><td>$start</td><td>$end</td><td>$title</td>$Table_view_Subtitle</tr>" if ($HTML_Fav != 0);
 					}
 				}
 			}
@@ -1995,6 +2030,14 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul><li><a name="Ch_sort">Ch_sort</a><br>
 	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired new channelnumbre.<br>
 	<i>Normally you do not have to edit this attribute manually. Once you clear this attribute, there is no manual sort!</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_Commands">Ch_Commands</a><br>
+	This allows commands to be assigned to the transmitters, which are executed when the transmitter is clicked.<br>
+	The transmitter is shown as a link in the table. Important, take over the channel name correctly!<br><br>
+	<u>Example code to assign a FHEM command to 2 transmitters:</u><br>
+	<code>{<br>
+	"Das Erste" => "set Fernsehr_LG channel 1",<br>
+	"ZDF" => "set Lampe off"<br>
+	}</code><br></a></ul><br>
 	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
 	You can write the data in readings (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
@@ -2100,6 +2143,14 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul><li><a name="Ch_sort">Ch_sort</a><br>
 	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschte neue Kanalnummer definierte.<br>
 	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten. Sobald man dieses Attribut l&ouml;scht, ist keine manuelle Sortierung vorhanden!</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_Commands">Ch_Commands</a><br>
+	Hiermit kann den Sendern Kommandos zuweisen, welche ausgef&uuml;hrt werden beim Klick auf den Sender.<br>
+	Die Darstellung des Senders erfolgt als Link in der Tabelle. Wichtig, Sendernamen richtig &uuml;bernehmen!<br><br>
+	<u>Beispielcode um 2 Sendern einen FHEM Befehl zuzuweisen:</u><br>
+	<code>{<br>
+	"Das Erste" => "set Fernsehr_LG channel 1",<br>
+	"ZDF" => "set Lampe off"<br>
+	}</code><br></a></ul><br>
 	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
 	Hiermit kann man die Daten in Readings schreiben lassen (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
