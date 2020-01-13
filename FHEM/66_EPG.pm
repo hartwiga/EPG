@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-05 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-13 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200105";
+	$hash->{VERSION} = "20200113";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -1343,7 +1343,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $ch_name = "";          # TV channel display-name
 	my $ch_name_before = "";   # TV channel display-name before
 	my $data_found = -1;       # counter to verification data
-	my $desc = "";             # TV desc
+	my $desc = "";             # TV desc text
+	my $descstart = 0;         # TV desc - start
+	my $descend = 0;           # TV desc - ened
 	my $end = "";              # TV time end
 	my $hour_diff_read = "";   # hour diff from file
 	my $start = "";            # TV time start
@@ -1475,13 +1477,20 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					}
 				}
 
-				if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/) {
-					$subtitle = $2 if ($ch_found != 0);  # subtitle
+				$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0); # subtitle
+
+				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0) {            # desc - one line
+					$desc = $2;
+					$descstart = 1;
+				}
+				
+				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $ch_found != 0) { # desc - multiline line
+					$desc = $2;
+					$descstart = 1;
 				}
 
-				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/) {
-					$desc = $2 if ($ch_found != 0);                         # desc
-				}
+				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<\/desc>/);      # desc - multiline line
+				$desc.= $1 if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/);  # desc - multiline line end
 
 				if ($_ =~ /<\/programme>/ && $ch_found != 0) {            # find end channel
 					$data_found = -1 if ($ch_name_before ne $ch_name);      # Reset bei Kanalwechsel
@@ -1530,6 +1539,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$ch_name_before = $ch_name;
 					$ch_name = "";
 					$desc = "";
+					$descstart = 0;
+					$descend = 0;
 					$hour_diff_read = "";
 					$subtitle = "";
 					$title = "";
