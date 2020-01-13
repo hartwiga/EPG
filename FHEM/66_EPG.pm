@@ -1482,9 +1482,10 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0) {            # desc - one line
 					$desc = $2;
 					$descstart = 1;
+					$descend = 1;
 				}
 				
-				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $ch_found != 0) { # desc - multiline line
+				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0 && $ch_found != 0) { # desc - multiline line
 					$desc = $2;
 					$descstart = 1;
 				}
