@@ -469,7 +469,7 @@ sub EPG_Attr() {
 
 		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavoriteShows");
 
-		readingsDelete($hash, "FTUI_Info") if ($attrName eq "FTUI_Info");
+		readingsDelete($hash, "FTUI_Info") if ($attrName eq "FTUI_support");
 
 		if ($attrName eq "Variant") {
 			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
@@ -1644,6 +1644,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	## FTUI support ##
 	if ($FTUI_support eq "on") {
+		Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI supported";
 		my $data = $HTML;
 
 		foreach my $ch (keys %{$data}) {
@@ -1653,7 +1654,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 					foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
 						if (exists $data->{$ch} && $d eq $ch) {
 							$data->{$d}{Ch_Command} = $hash->{helper}{Ch_Commands}{$d};
-							Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI - Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+							Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, FTUI added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
 						}
 					}
 				}
@@ -1664,6 +1665,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 				delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
 			}
 		}
+
+		## http://jsoneditoronline.org/?id=bb9513fab8044faa8f49014efc2fd70f
 		readingsSingleUpdate($hash, "FTUI_Info", JSON->new->utf8(0)->encode($data), 0);	
 	}
 
