@@ -214,6 +214,7 @@ sub EPG_Initialize($) {
 	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no Ch_Commands:textField-long ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
 																		"EPG_auto_download:yes,no EPG_auto_update:yes,no ".
+																		"FTUI_support:on,off ".
 																		"FavoriteShows ".
                                     "Table:on,off Table_view_Subtitle:no,yes disable ".
                                     "Variant:Rytec,TvProfil_XMLTV,WebGrab+Plus,XMLTV.se,teXXas_RSS";
@@ -463,17 +464,16 @@ sub EPG_Attr() {
 	}
 	
 	if ($cmd eq "del") {
+		
+		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
+
+		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavoriteShows");
+
+		readingsDelete($hash, "FTUI_Info") if ($attrName eq "FTUI_Info");
+
 		if ($attrName eq "Variant") {
 			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
 			return undef;
-		}
-
-		if ($attrName eq "Ch_Info_to_Reading") {
-			EPG_readingsDeleteChannel($hash);
-		}
-
-		if ($attrName eq "FavoriteShows") {
-			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 		}
 	}
 }
@@ -1479,19 +1479,19 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 				$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/ && $ch_found != 0); # subtitle
 
-				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $ch_found != 0) {            # desc - one line
+				if ($_ =~ /<desc lang="(.*)">(.*)<\/desc>/ && $descstart == 0 && $ch_found != 0) {      # desc - one line
 					$desc = $2;
 					$descstart = 1;
 					$descend = 1;
 				}
-				
+
 				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0 && $ch_found != 0) { # desc - multiline line
 					$desc = $2;
 					$descstart = 1;
 				}
 
-				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<\/desc>/);  # desc - multiline line
-				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {        # desc - multiline line end
+				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/);  # desc - multiline line
+				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {                              # desc - multiline line end
 					$desc.= $1;
 					$descend = 1;
 				};
@@ -1573,8 +1573,10 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
 	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
   my $hash = $defs{$name};
+	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
+	my $FTUI_support = AttrVal($name, "FTUI_support", "off");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
@@ -1638,6 +1640,31 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 			readingsEndUpdate($hash, 1);
 		}
+	}
+
+	## FTUI support ##
+	if ($FTUI_support eq "on") {
+		my $data = $HTML;
+
+		foreach my $ch (keys %{$data}) {
+			## check Ch_Command for channel
+			if ($Ch_Commands) {
+				if (grep /$ch/, $Ch_Commands) {
+					foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
+						if (exists $data->{$ch} && $d eq $ch) {
+							$data->{$d}{Ch_Command} = $hash->{helper}{Ch_Commands}{$d};
+							Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI - Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+						}
+					}
+				}
+			}
+
+			## clean hour_diff for channel
+			for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+				delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
+			}
+		}
+		readingsSingleUpdate($hash, "FTUI_Info", JSON->new->utf8(0)->encode($data), 0);	
 	}
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
@@ -2065,6 +2092,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	The attribute has no influence on the detailed view. (yes | no = default)</a></ul><br>
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Names of programs which are searched for separately. (values ​​must be separated by a semicolon)</a></ul><br>
+	<ul><li><a name="FTUI_support">FTUI_support</a><br>
+	Enable support for the FTUI. This provides a reading <code> FTUI_Info </code> with the data. (on | off = default)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximum time in seconds for the download. (default 10 | maximum 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
@@ -2178,6 +2207,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	bei einem Klick auf die Raumansicht. Auf die Detailansicht hat das Attribut keinen Einfluss. (yes | no = default)</a></ul><br>
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Namen von Sendungen welche gezielt gesucht werden k&ouml;nnen. (mehrere Werte m&uuml;ssen durch ein Semikolon getrennt werden)</a></ul><br>
+	<ul><li><a name="FTUI_support">FTUI_support</a><br>
+	Unterst&uuml;tzung f&uuml;r das FTUI aktivieren. Dadurch wird ein Reading <code>FTUI_Info</code> mit den Daten bereitgestellt. (on | off = default)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximale Zeit in Sekunden für den Download. (Standard 10 | maximal 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
