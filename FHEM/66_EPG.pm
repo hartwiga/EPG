@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-13 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-14 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -272,7 +272,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200113";
+	$hash->{VERSION} = "20200114";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -1490,8 +1490,11 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$descstart = 1;
 				}
 
-				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<\/desc>/);      # desc - multiline line
-				$desc.= $1 if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/);  # desc - multiline line end
+				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<\/desc>/);  # desc - multiline line
+				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {        # desc - multiline line end
+					$desc.= $1;
+					$descend = 1;
+				};
 
 				if ($_ =~ /<\/programme>/ && $ch_found != 0) {            # find end channel
 					$data_found = -1 if ($ch_name_before ne $ch_name);      # Reset bei Kanalwechsel
@@ -1579,7 +1582,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
 
 	delete($hash->{helper}{RUNNING_PID});
-
+	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
 
@@ -1633,7 +1636,6 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 					readingsBulkUpdate($hash, "x_".$ch."_".$time, $HTML->{$ch}{EPG}[$i]{title});
 				}
 			}
-
 			readingsEndUpdate($hash, 1);
 		}
 	}
