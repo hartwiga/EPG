@@ -464,12 +464,8 @@ sub EPG_Attr() {
 	}
 	
 	if ($cmd eq "del") {
-		
 		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
-
 		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavoriteShows");
-
-		readingsDelete($hash, "FTUI_Info") if ($attrName eq "FTUI_support");
 
 		if ($attrName eq "Variant") {
 			delete $hash->{helper}{programm} if ($hash->{helper}{programm});
@@ -1666,8 +1662,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 		}
 
-		## http://jsoneditoronline.org/?id=bb9513fab8044faa8f49014efc2fd70f
-		readingsSingleUpdate($hash, "FTUI_Info", JSON->new->utf8(0)->encode($data), 0);	
+		EPG_FTUI_Return($hash,$data);
+		return undef;
 	}
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
@@ -1983,6 +1979,20 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 	}
 
 	return ($title, $desc, $mod_cnt);
+}
+
+#####################
+sub EPG_FTUI_Return($$) {
+	my ($hash, $data) = @_;
+	my $name = $hash->{NAME};
+
+	Log3 $name, 4, "$name: EPG_FTUI_Return is running";
+
+	#$data = utf8ToLatin1($data);
+	#$data = latin1ToUtf8($data);
+
+	$data = toJSON($data);
+	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('\"$data\"')", "");
 }
 
 # Eval-Rückgabewert für erfolgreiches
