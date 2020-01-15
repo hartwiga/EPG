@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-14 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-16 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -273,7 +273,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200114";
+	$hash->{VERSION} = "20200116";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -1925,6 +1925,16 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
+			if ($values[$i] =~ /'/) { ## need for Java !!!
+				$error_cnt++;
+				if ($error_cnt != 0) {
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 found wrong syntax ".'->\'<-';
+					Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 orginal: ".$values[$i];
+				}
+				$values[$i] =~ s/'//g;
+				$mod_cnt++;
+				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
+			}
 		}
 
 		$title = $values[$i] if($i == 0 && $error_cnt != 0);
@@ -1988,11 +1998,8 @@ sub EPG_FTUI_Return($$) {
 
 	Log3 $name, 4, "$name: EPG_FTUI_Return is running";
 
-	#$data = utf8ToLatin1($data);
-	#$data = latin1ToUtf8($data);
-
 	$data = toJSON($data);
-	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('\"$data\"')", "");
+	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('$data')", "");
 }
 
 # Eval-Rückgabewert für erfolgreiches
