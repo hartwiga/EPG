@@ -1,5 +1,10 @@
 2020-01-16 - Update 66_EPG.pm
 
+- remove some FTUI cmd´s
+- added commandref
+- test output for FTUI with cmd view_FTUI_data
+2020-01-16 - Update 66_EPG.pm
+
 - added Fav cmd for FTUI
 - fix Syntaxcheck
 2020-01-16 - Update 66_EPG.pm
