@@ -315,6 +315,9 @@ sub EPG_Get($$$@) {
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
 																	    scalar(@channel_available) > 0 ); # favorite shows
+	$getlist.= "loadEPG_Fav_FTUI:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
+	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
+																	    scalar(@channel_available) > 0 && AttrVal($name, "FTUI_support", undef) eq "on");
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -380,7 +383,7 @@ sub EPG_Get($$$@) {
 			}
 		}
 
-		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
+		if ($cmd =~ /^loadEPG/ && $cmd !~ /loadEPG_Fav/) {
 			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 
 			$HTML = {};
@@ -396,7 +399,7 @@ sub EPG_Get($$$@) {
 			return undef;
 		}
 
-		if ($cmd eq "loadEPG_Fav") {
+		if ($cmd =~ /^loadEPG_Fav/) {
 			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - looking for favorite shows with $Variant";
 
@@ -411,7 +414,7 @@ sub EPG_Get($$$@) {
 			$getlist.= "loadEPG_Prime:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "20:15" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
 		}
  		
-		if ($cmd =~ /^loadEPG/ && $cmd ne "loadEPG_Fav") {
+		if ($cmd =~ /^loadEPG/ && $cmd !~ /^loadEPG_Fav/) {
 			$HTML = {};
 			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
@@ -420,7 +423,7 @@ sub EPG_Get($$$@) {
 			return undef;
 		}
 		
-		if ($cmd eq "loadEPG_Fav") {
+		if ($cmd =~ /loadEPG_Fav/) {
 			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
 			return "still in development - $cmd on $Variant";
 		}
@@ -468,7 +471,7 @@ sub EPG_Attr() {
 			return $err if($err);
 		}
 	}
-	
+
 	if ($cmd eq "del") {
 		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
 		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavoriteShows");
@@ -682,7 +685,7 @@ sub EPG_FW_Detail($@) {
 				}
 			}
 		}
-		
+
 		foreach my $d (keys %{$HTML}) {
 			if ($HTML->{$d}{EPG}) {
 				$cnt_ch++;
@@ -1112,6 +1115,7 @@ sub EPG_Undef($$) {
 	delete $hash->{helper}{programm} if(defined($hash->{helper}{programm}));
 	delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 	delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
+	delete $hash->{helper}{FTUI_data} if(defined($hash->{helper}{FTUI_data}));
 
 	return undef;
 }
@@ -1446,9 +1450,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
 					}
 
-					if ($cmd ne "loadEPG_Fav" && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
-						if ($cmd ne "loadEPG_today") {
-							$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                           # Zeitpunktsuche, normal
+					if ($cmd !~ /loadEPG_Fav/ && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
+						if ($cmd !~ /loadEPG_today/) {
+							$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                # Zeitpunktsuche, normal
 						} else {
               # Zeitpunktsuche, kompletter Tag
 							if (($start eq $today_start || $start gt $today_start) && ($end eq $today_end || $end lt $today_end) || ($start lt $today_end && ($end gt $today_end || $end eq $today_end))) {
@@ -1883,10 +1887,14 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 	
 	## http://jsoneditoronline.org/ ##
 	Log3 $name, 5, "$name: SyntaxCheck_for_JSON_v1 is running";
-	
+
+	$subtitle = "-" if ($subtitle eq "");
+	$desc = "-" if ($desc eq "");
+
+	## arrray need always uses the same number
 	push (@values,$title);
-	push (@values,$subtitle) if $subtitle;
-	push (@values,$desc) if $desc;
+	push (@values,$subtitle);
+	push (@values,$desc);
 
 	for(my $i=0;$i<=$#values;$i++) {
 		if ($values[$i]) {
@@ -1900,6 +1908,7 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
+			
 			if ($values[$i] =~ /\\\s/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
@@ -1910,6 +1919,7 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
+			
 			if ($values[$i] =~ /\\"/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
@@ -1920,6 +1930,7 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
+			
 			if ($values[$i] =~ /\|/) {
 				$error_cnt++;
 				if ($error_cnt != 0) {
@@ -1930,6 +1941,7 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 				$mod_cnt++;
 				Log3 $name, 4, "$name: SyntaxCheck_for_JSON_v1 modded: ".$values[$i];
 			}
+			
 			if ($values[$i] =~ /'/) { ## need for Java !!!
 				$error_cnt++;
 				if ($error_cnt != 0) {
@@ -1947,6 +1959,10 @@ sub EPG_SyntaxCheck_for_JSON_v1($$$$) {
 		$desc = $values[$i] if($i == 2 && $error_cnt != 0);
 		$error_cnt = 0;
 	}
+
+	$subtitle = "" if ($subtitle eq "-");
+	$desc = "" if ($desc eq "-");
+
 	return ($title, $subtitle, $desc, $mod_cnt);
 }
 
@@ -2003,6 +2019,9 @@ sub EPG_FTUI_Return {
 	my $hash = $defs{$name};
 
 	Log3 $name, 4, "$name: EPG_FTUI_Return is running";
+
+	# http://dein_server:8083/fhem/?detail=myEPG&dev.getmyEPG=myEPG&cmd.getmyEPG=get&arg.getmyEPG=xyz_loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
+	# http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
 
 	my $data = toJSON($hash->{helper}{FTUI_data});
 	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('$data')", "");
