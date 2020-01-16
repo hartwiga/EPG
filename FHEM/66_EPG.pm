@@ -53,6 +53,7 @@ my %EPG_transtable_EN = (
 		## EPG_Get ##
 		"get_available_ch"    =>  "available_channels search",
 		"get_loadEPG"         =>  "started",
+		"get_view_FTUI_data"  =>  "no data exists",
 		"Notify_auto_msg"     =>  "automatic process",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "FavoriteShow",
@@ -131,6 +132,7 @@ my %EPG_transtable_EN = (
 		## EPG_Get ##
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
 		"get_loadEPG"         =>  "gestartet",
+		"get_view_FTUI_data"  =>  "keine Daten vorhanden",
 		"Notify_auto_msg"     =>  "automatischer Prozess",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "Lieblingssendung",
@@ -315,9 +317,7 @@ sub EPG_Get($$$@) {
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
 																	    scalar(@channel_available) > 0 ); # favorite shows
-	$getlist.= "loadEPG_Fav_FTUI:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
-	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
-																	    scalar(@channel_available) > 0 && AttrVal($name, "FTUI_support", undef) eq "on");
+	$getlist.= "view_FTUI_data:noArg " if (AttrVal($name, "FTUI_support", undef) eq "on" && scalar(@channel_available) > 0 );
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -356,17 +356,20 @@ sub EPG_Get($$$@) {
 		return undef;
 	}
 
+	if ($cmd eq "view_FTUI_data") {
+		Log3 $name, 4, "$name: get $cmd - view memory";
+		if (exists $hash->{helper}{FTUI_data}) {
+			return $hash->{helper}{FTUI_data};
+		} else {
+			return $EPG_tt->{"get_view_FTUI_data"};
+		}
+	}
+
 	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
 		if ( AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" && scalar(@channel_available) > 0 ) {
 			$getlist.= "loadEPG_now:noArg ";               # now
 			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 			$getlist.= "loadEPG_today:noArg ";             # today all
-
-			if (AttrVal($name, "FTUI_support", undef) eq "on") {
-				$getlist.= "loadEPG_now_FTUI:noArg ";
-				$getlist.= "loadEPG_Prime_FTUI:noArg ";
-				$getlist.= "loadEPG_today_FTUI:noArg ";
-			}
 
 			my $TimeNowMod = FmtDateTime(time());
 			$TimeNowMod =~ s/-|:|\s//g;
@@ -1396,7 +1399,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
 	}
 
-	if ($cmd =~ /loadEPG(_FTUI)?$/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
+	if ($cmd =~ /loadEPG/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
 		$cmd2 =~ s/_//g;
 		$cmd2.= "10 $TimeLocaL_GMT_Diff";
 		$TimeNow = $cmd2;
@@ -1649,7 +1652,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 
 	## FTUI support ##
-	if ($FTUI_support eq "on" && $cmd =~ /^loadEPG.*FTUI$/ ) {
+	if ($FTUI_support eq "on") {
 		Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI supported";
 		my $data = $HTML;
 
@@ -1672,7 +1675,14 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 		}
 		$hash->{helper}{FTUI_data} = $data;
-		InternalTimer(gettimeofday()+3, "EPG_FTUI_Return", "$name,$EPG_info");
+
+		## to test (device,cmd & csrfToken must be adapted)
+		# http://dein_server:8083/fhem/?detail=myEPG&dev.getmyEPG=myEPG&cmd.getmyEPG=get&arg.getmyEPG=xyz_loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
+		# pathlist          # http://raspberrypi:8083/fhem?detail=WEB&dev.getWEB=WEB&cmd.getWEB=get&arg.getWEB=pathlist&val.getWEB=&XHR=1&fwcsrf=csrf_897073065183021&XHR=1
+		# view_FTUI_data    # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=view_FTUI_data&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
+		$hash->{helper}{FTUI_data} = toJSON($hash->{helper}{FTUI_data});
+
+		#CommandGet($hash, "$name view_FTUI_data");
 	}
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
@@ -2013,19 +2023,6 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 }
 
 #####################
-sub EPG_FTUI_Return {
-	my ($param) = @_;
-	my ($name,$txt) = split(",", $param);
-	my $hash = $defs{$name};
-
-	Log3 $name, 4, "$name: EPG_FTUI_Return is running";
-
-	# http://dein_server:8083/fhem/?detail=myEPG&dev.getmyEPG=myEPG&cmd.getmyEPG=get&arg.getmyEPG=xyz_loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
-	# http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
-
-	my $data = toJSON($hash->{helper}{FTUI_data});
-	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('$data')", "");
-}
 
 # Eval-Rückgabewert für erfolgreiches
 # Laden des Moduls
@@ -2105,6 +2102,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: let the EPG data of the selected channels be from the current day</li><a name=""></a>
 		<li>loadFile: load the file with the information</li><a name=""></a>
+		<li>view_FTUI_data: outputs the information for the FTUI</li><a name=""></a>
 	</ul>
 <br><br>
 
@@ -2138,7 +2136,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Names of programs which are searched for separately. (values ​​must be separated by a semicolon)</a></ul><br>
 	<ul><li><a name="FTUI_support">FTUI_support</a><br>
-	Enable support for the FTUI. This provides a reading <code> FTUI_Info </code> with the data. (on | off = default)</a></ul><br>
+	Enable support for the FTUI. This provides get command <code>view_FTUI_data</code> and prepares the data internally. (on | off = default)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximum time in seconds for the download. (default 10 | maximum 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
@@ -2220,6 +2218,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
 		<li>loadFile: l&auml;d die Datei mit den Informationen herunter</li><a name=""></a>
+		<li>view_FTUI_data: gibt die Informationen f&uuml;r das FTUI aus</li><a name=""></a>
 	</ul>
 <br><br>
 
@@ -2253,7 +2252,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul><li><a name="FavoriteShows">FavoriteShows</a><br>
 	Namen von Sendungen welche gezielt gesucht werden k&ouml;nnen. (mehrere Werte m&uuml;ssen durch ein Semikolon getrennt werden)</a></ul><br>
 	<ul><li><a name="FTUI_support">FTUI_support</a><br>
-	Unterst&uuml;tzung f&uuml;r das FTUI aktivieren. Dadurch wird ein Reading <code>FTUI_Info</code> mit den Daten bereitgestellt. (on | off = default)</a></ul><br>
+	Unterst&uuml;tzung f&uuml;r das FTUI aktivieren. Dadurch wird der get Befehle <code>view_FTUI_data</code> bereitgestellt und die internen Daten werden aufbereitet. (on | off = default)</a></ul><br>
 	<ul><li><a name="HTTP_TimeOut">HTTP_TimeOut</a><br>
 	Maximale Zeit in Sekunden für den Download. (Standard 10 | maximal 90)</li><a name=" "></a></ul><br>
 	<ul><li><a name="Table">Table</a><br>
