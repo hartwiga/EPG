@@ -52,7 +52,7 @@ my %EPG_transtable_EN = (
 		"months12"            =>  "December",
 		## EPG_Get ##
 		"get_available_ch"    =>  "available_channels search",
-		"get_loadEPG"         =>  "accomplished",
+		"get_loadEPG"         =>  "started",
 		"Notify_auto_msg"     =>  "automatic process",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "FavoriteShow",
@@ -99,7 +99,7 @@ my %EPG_transtable_EN = (
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json failed, use verbose 5 to view more",
 		## EPG_nonBlock_loadEPG ##
-		"loadEPG_msg1"        =>  "all EPG channel information loaded",
+		"loadEPG_msg1"        =>  "all EPG channel information processed",
 		"loadEPG_msg2"        =>  "no EPG channel information available",
 		"loadEPG_msg3"        =>  "ERROR: loaded Information canceled, file not found",
 		## EPG_nonBlock_abortFn ##
@@ -130,7 +130,7 @@ my %EPG_transtable_EN = (
 		"months12"            =>  "Dezember",
 		## EPG_Get ##
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
-		"get_loadEPG"         =>  "angenommen",
+		"get_loadEPG"         =>  "gestartet",
 		"Notify_auto_msg"     =>  "automatischer Prozess",
 		## EPG_FW_Detail ##
 		"btn_fav"             =>  "Lieblingssendung",
@@ -177,7 +177,7 @@ my %EPG_transtable_EN = (
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json fehlgeschlagen, bitte benutze verbose 5 um mehr zu erkennen",
 		## EPG_nonBlock_loadEPG ##
-		"loadEPG_msg1"        =>  "alle EPG Daten geladen",
+		"loadEPG_msg1"        =>  "alle EPG Daten verarbeitet",
 		"loadEPG_msg2"        =>  "keine EPG Daten verfügbar",
 		"loadEPG_msg3"        =>  "ERROR: Information laden abgebrochen, Datei nicht gefunden",
 		## EPG_nonBlock_abortFn ##
@@ -358,6 +358,12 @@ sub EPG_Get($$$@) {
 			$getlist.= "loadEPG_now:noArg ";               # now
 			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 			$getlist.= "loadEPG_today:noArg ";             # today all
+
+			if (AttrVal($name, "FTUI_support", undef) eq "on") {
+				$getlist.= "loadEPG_now_FTUI:noArg ";
+				$getlist.= "loadEPG_Prime_FTUI:noArg ";
+				$getlist.= "loadEPG_today_FTUI:noArg ";
+			}
 
 			my $TimeNowMod = FmtDateTime(time());
 			$TimeNowMod =~ s/-|:|\s//g;
@@ -1369,7 +1375,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	$TimeNow =~ s/-|:|\s//g;
 	$TimeNow.= " $TimeLocaL_GMT_Diff";                       # loadEPG_now   20191016150432 +0200
 
-	if ($cmd eq "loadEPG_Prime") {
+	if ($cmd =~ /loadEPG_Prime/) {
 		if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
 			my @time = split(/-|\s|:/,FmtDateTime(time()));
 			$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
@@ -1381,12 +1387,12 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		}
 	}
 	
-	if ($cmd eq "loadEPG_today") {                           # Beginn und Ende von heute bestimmen
+	if ($cmd =~ /loadEPG_today/) {                           # Beginn und Ende von heute bestimmen
 		$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
 		$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
 	}
 
-	if ($cmd eq "loadEPG" && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
+	if ($cmd =~ /loadEPG(_FTUI)?$/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
 		$cmd2 =~ s/_//g;
 		$cmd2.= "10 $TimeLocaL_GMT_Diff";
 		$TimeNow = $cmd2;
@@ -1614,7 +1620,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			}
 		}
 
-		if ($cmd eq "loadEPG_now" || $cmd eq "loadEPG_Prime" || $cmd eq "loadEPG_today") {
+		if ($cmd =~ /loadEPG_now/ || $cmd =~ /loadEPG_Prime/ || $cmd =~ /loadEPG_today/) {
 			## create Readings ##
 			readingsBeginUpdate($hash);
 
@@ -1639,7 +1645,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 
 	## FTUI support ##
-	if ($FTUI_support eq "on") {
+	if ($FTUI_support eq "on" && $cmd =~ /^loadEPG.*FTUI$/ ) {
 		Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI supported";
 		my $data = $HTML;
 
@@ -1661,9 +1667,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 				delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
 			}
 		}
-
-		EPG_FTUI_Return($hash,$data);
-		return undef;
+		$hash->{helper}{FTUI_data} = $data;
+		InternalTimer(gettimeofday()+3, "EPG_FTUI_Return", "$name,$EPG_info");
 	}
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
@@ -1992,13 +1997,14 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 }
 
 #####################
-sub EPG_FTUI_Return($$) {
-	my ($hash, $data) = @_;
-	my $name = $hash->{NAME};
+sub EPG_FTUI_Return {
+	my ($param) = @_;
+	my ($name,$txt) = split(",", $param);
+	my $hash = $defs{$name};
 
 	Log3 $name, 4, "$name: EPG_FTUI_Return is running";
 
-	$data = toJSON($data);
+	my $data = toJSON($hash->{helper}{FTUI_data});
 	FW_directNotify("#FHEMWEB:WEB", "FW_okDialog('$data')", "");
 }
 
