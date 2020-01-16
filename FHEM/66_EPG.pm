@@ -314,8 +314,11 @@ sub EPG_Get($$$@) {
                                              ReadingsVal($name, "EPG_file_name", undef) ne $EPG_tt->{"File_check_DownFile"});
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
-																	    scalar(@channel_available) > 0 ); # favorite shows
+																	    scalar(@channel_available) > 0 );
 	$getlist.= "jsonEPG:noArg ";
+
+	## reset old JSON value if modul reload
+	delete $hash->{helper}{FTUI_data} if ($cmd eq "?" && scalar(@channel_available) == 0 && exists $hash->{helper}{FTUI_data});
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -1649,8 +1652,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		}
 	}
 
-	## FTUI support ##
-	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, FTUI supported";
+	## JSON data ##
 	my $data = $HTML;
 
 	my @mychannels = ();
@@ -1660,7 +1662,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 			if (grep /$ch/, $Ch_Commands) {
 				foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
 					if (exists $data->{$ch} && $d eq $ch) {
-						$data->{$d}{Ch_Command} = $hash->{helper}{Ch_Commands}{$d};
+						$data->{$d}{ch_command} = $hash->{helper}{Ch_Commands}{$d};
 						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, FTUI added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
 					}
 				}
@@ -1676,10 +1678,10 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{FTUI_data} = $data;
 
 	## to test (device,cmd & csrfToken must be adapted)
-	# http://dein_server:8083/fhem/?detail=myEPG&dev.getmyEPG=myEPG&cmd.getmyEPG=get&arg.getmyEPG=xyz_loadEPG_now_FTUI&val.getmyEPG=&fwcsrf=csrf_123456789012345&XHR=1
-	# pathlist  # http://raspberrypi:8083/fhem?detail=WEB&dev.getWEB=WEB&cmd.getWEB=get&arg.getWEB=pathlist&val.getWEB=&XHR=1&fwcsrf=csrf_897073065183021&XHR=1
 	# jsonEPG   # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=jsonEPG&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
+
 	$hash->{helper}{FTUI_data} = toJSON(\@mychannels);
+	## JSON ready
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
@@ -2091,14 +2093,18 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	<ul>
 		<a name="available_channels"></a>
 		<li>available_channels: retrieves all available channels</li><a name=""></a>
+		<a name="jsonEPG"></a>
+		<li>jsonEPG: outputs the loaded information in JSON format</li><a name=""></a>
 		<a name="loadEPG_now"></a>
 		<li>loadEPG_now: let the EPG data of the selected channels at the present time</li><a name=""></a>
+		<a name="loadEPG_Fav"></a>
+		<li>loadEPG_Fav: Loads the EPG data of the defined title of the attribute <code>FavoriteShows</code></li><a name=""></a>
 		<a name="loadEPG_Prime"></a>
 		<li>loadEPG_Prime: let the EPG data of the selected channels be at PrimeTime 20:15</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: let the EPG data of the selected channels be from the current day</li><a name=""></a>
+		<a name="loadFile"></a>
 		<li>loadFile: load the file with the information</li><a name=""></a>
-		<li>jsonEPG: outputs the information for the FTUI</li><a name=""></a>
 	</ul>
 <br><br>
 
@@ -2205,14 +2211,18 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	<ul>
 		<a name="available_channels"></a>
 		<li>available_channels: ruft alle verf&uuml;gbaren Kan&auml;le ab</li><a name=""></a>
+		<a name="jsonEPG"></a>
+		<li>jsonEPG: gibt die geladen Informationen im JSON Format zurück</li><a name=""></a>
 		<a name="loadEPG_now"></a>
 		<li>loadEPG_now: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom jetzigen Zeitpunkt</li><a name=""></a>
+		<a name="loadEPG_Fav"></a>
+		<li>loadEPG_Fav: l&auml;d die EPG-Daten der definierten Titel des Attributes <code>FavoriteShows</code></li><a name=""></a>
 		<a name="loadEPG_Prime"></a>
 		<li>loadEPG_Prime: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
+		<a name="loadFile"></a>
 		<li>loadFile: l&auml;d die Datei mit den Informationen herunter</li><a name=""></a>
-		<li>jsonEPG: gibt die Informationen f&uuml;r das FTUI aus</li><a name=""></a>
 	</ul>
 <br><br>
 
