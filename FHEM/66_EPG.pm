@@ -4,7 +4,7 @@
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
 #
-# 2019 | 2020 - HomeAuto_User & elektron-bbs
+# 2019 | 2020 - HomeAuto_User, elektron-bbs, OdfFhem
 #
 #################################################################
 # Varianten der Informationen:
@@ -350,9 +350,12 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "jsonEPG") {
+		## to test (device,cmd & csrfToken must be adapted)
+		# jsonEPG   # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=jsonEPG&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
+
 		Log3 $name, 4, "$name: get $cmd - view memory";
 		if (exists $hash->{helper}{FTUI_data}) {
-			return $hash->{helper}{FTUI_data};
+			return toJSON($hash->{helper}{FTUI_data});
 		} else {
 			return $EPG_tt->{"get_view_FTUI_data"};
 		}
@@ -1540,7 +1543,6 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$hash->{helper}{HTML}{$ch_name}{title_wish} = "yes" if ($title_wish);
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{start} = $start;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{end} = $end;
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{hour_diff} = $hour_diff_read;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{title} = $title;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{subtitle} = $subtitle;
 					$hash->{helper}{HTML}{$ch_name}{EPG}[$data_found]{desc} = $desc;
@@ -1652,41 +1654,24 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 
 	## JSON data ##
-	my $data = $HTML;
 	my @mychannels = ();
 
-	#Log3 $name, 3, Dumper\$HTML;
-
-	foreach my $ch (keys %{$data}) {
+	foreach my $ch (keys %{$HTML}) {
 		## check Ch_Command for channel
 		if ($Ch_Commands) {
 			if (grep /$ch/, $Ch_Commands) {
 				foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
-					if (exists $data->{$ch} && $d eq $ch) {
-						$data->{$d}{ch_command} = $hash->{helper}{Ch_Commands}{$d};
+					if (exists $HTML->{$ch} && $d eq $ch) {
+						$HTML->{$d}{ch_command} = $hash->{helper}{Ch_Commands}{$d};
 						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, JSON added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
 					}
 				}
 			}
 		}
-
-		## JSON data revised
-		for (my $i=0;$i<@{$data->{$ch}{EPG}};$i++){
-			## clean hour_diff for channel
-			delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
-		}
-		push (@mychannels, $data->{$ch});
+		push (@mychannels, $HTML->{$ch});
 	}
 
-	#Log3 $name, 3, Dumper\$HTML;
-
-	$hash->{helper}{FTUI_data} = $data;
-
-	## to test (device,cmd & csrfToken must be adapted)
-	# jsonEPG   # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=jsonEPG&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
-	$hash->{helper}{FTUI_data} = toJSON(\@mychannels);
-	## JSON ready
-
+	$hash->{helper}{FTUI_data} = \@mychannels;
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
 	$hash->{helper}{last_cmd} = $cmd;
