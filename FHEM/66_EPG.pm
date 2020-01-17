@@ -771,21 +771,17 @@ sub EPG_FW_Detail($@) {
 						## einzelne Werte ##
 						#Log3 $name, 3, "$name: description       -> $d";
 						#Log3 $name, 3, "$name: description value -> $value->{$d}";
+
 						if ($d eq "start") {
-							$start = substr($value->{$d},8,2).":".substr($value->{$d},10,2);
-							my ($sec,$min,$hour,$mday,$mon,$year) = (substr($value->{$d},12,2),substr($value->{$d},10,2),substr($value->{$d},8,2),substr($value->{$d},6,2),substr($value->{$d},4,2) - 1,substr($value->{$d},0,4) - 1900);
-							my $timestamp = fhemTimeGm($sec, $min, $hour, $mday, $mon, $year);
+							$start = substr($value->{$d},11,2).":".substr($value->{$d},14,2); # $start -> 2020-01-17 11:55:00
 							my $wday;
-							($sec,$min,$hour,$mday,$mon,$year,$wday) = localtime($timestamp);
+							my ($sec,$min,$hour,$mday,$mon,$year,$wday) = localtime(time_str2num($value->{$d}));
 							$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 						}
 
 						if ($d eq "end") {
-							$end = substr($value->{$d},8,2).":".substr($value->{$d},10,2);
-
-							my ($sec,$min,$hour,$mday,$mon,$year) = (substr($value->{$d},12,2),substr($value->{$d},10,2),substr($value->{$d},8,2),substr($value->{$d},6,2),substr($value->{$d},4,2) - 1,substr($value->{$d},0,4) - 1900);
-							my $timestamp = fhemTimeLocal($sec, $min, $hour, $mday, $mon, $year);
-							$end_timstamp = $timestamp;
+							$end = substr($value->{$d},11,2).":".substr($value->{$d},14,2);
+							$end_timstamp = time_str2num($value->{$d});
 						}
 						$title = $value->{$d} if ($d eq "title");
 						$desc = $value->{$d} if ($d eq "desc");
@@ -1513,8 +1509,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name          -> $ch_name";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_before        -> $ch_name_before";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | EPG information  -> $data_found (value of array)";
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start (intern)   -> $start";
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end (indern)     -> $end";
+
+					## time format better for JSON and format once intern
+					($start,$end) = EPG_StartEnd_toISO($start,$end);
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start            -> $start";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end              -> $end";
+
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | title            -> $title";
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | subtitle         -> $subtitle";
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | desc             -> $desc.\n";
@@ -1675,10 +1677,6 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		for (my $i=0;$i<@{$data->{$ch}{EPG}};$i++){
 			## clean hour_diff for channel
 			delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
-			## time start revised
-			#$data->{$ch}{EPG}[$i]{start} = EPG_StartEnd_toISO($hash,$data->{$ch}{EPG}[$i]{start}) if($data->{$ch}{EPG}[$i]{start});
-			## time end revised
-			#$data->{$ch}{EPG}[$i]{end} = EPG_StartEnd_toISO($hash,$data->{$ch}{EPG}[$i]{end}) if($data->{$ch}{EPG}[$i]{end});
 		}
 		push (@mychannels, $data->{$ch});
 	}
@@ -2031,18 +2029,19 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 	return ($title, $desc, $mod_cnt);
 }
 
-##################### ( 20200117013500 +0100 to ISO 8601 Format --> 2020-01-16T10:15:00)
+##################### (valid Format´s)
+# 20200116101500 +0100 to 2020-01-16T10:15:00 | Date.parse("2020-01-16T10:15:00") liefert 1579166100000
+# 20200116101500 +0100 to 2020-01-16 10:15:00 | Date.parse("2020-01-16 10:15:00") liefert 1579166100000
+
 sub EPG_StartEnd_toISO($$) {
-	my ($hash, $value) = @_;
-	my $name = $hash->{NAME};
+	my($start, $end) = @_;
 
-	Log3 $name, 5, "$name: EPG_StartEnd_toISO input $value";
-	$value = substr($value,0,4)."-".substr($value,4,2)."-".substr($value,6,2)."T".substr($value,8,2).":".substr($value,10,2).":".substr($value,12,2);
-	Log3 $name, 5, "$name: EPG_StartEnd_toISO output $value";
-
-	return $value;
+	$start = substr($start,0,4)."-".substr($start,4,2)."-".substr($start,6,2)." ".substr($start,8,2).":".substr($start,10,2).":".substr($start,12,2);
+	$end = substr($end,0,4)."-".substr($end,4,2)."-".substr($end,6,2)." ".substr($end,8,2).":".substr($end,10,2).":".substr($end,12,2);
+	return ($start, $end);
 }
 
+#####################
 
 # Eval-Rückgabewert für erfolgreiches
 # Laden des Moduls
