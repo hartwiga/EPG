@@ -1,5 +1,9 @@
 2020-01-17 - Update 66_EPG.pm
 
+- fix readingsname after revised timeoutput
+- fix autorelaod after revised timeoutput
+2020-01-17 - Update 66_EPG.pm
+
 - revised start & end time output
 - revised code for time cal in FW_detail
 - added sub EPG_StartEnd_toISO
