@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-16 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-17 00:01:50Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -15,9 +15,7 @@
 #################################################################
 # Note´s
 # -
-#
-# Features:
-# - definierbare CommandFunktion bei Onklick
+# - start-end JSON --> Date.parse("2020-01-16T10:15:00") liefert 1579166100000
 #################################################################
 
 package main;
@@ -273,7 +271,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200116";
+	$hash->{VERSION} = "20200117";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -288,14 +286,8 @@ sub EPG_Set($$$@) {
 	my $setList = "";
 	my $cmd = $a[0];
 
-	return "no set value specified" if(int(@a) < 1);
-
-	if ($cmd ne "?") {
-		return "development";
-	}
-
+	return "$name: no set function exists" if ($cmd ne "?");
 	return $setList if ( $a[0] eq "?");
-	return "Unknown argument $cmd, choose one of $setList" if (not grep /$cmd/, $setList);
 	return undef;
 }
 
@@ -308,14 +300,13 @@ sub EPG_Get($$$@) {
 	my $Variant = AttrVal($name, "Variant", "unknown");
 	$cmd2 = "" if (!$cmd2);
 
-	my $getlist = "loadFile:noArg ";
+	my $getlist = "loadFile:noArg jsonEPG:noArg ";
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
 	                                           ReadingsVal($name, "HttpResponse", undef) eq $EPG_tt->{"ParseHttp_Http_ok"} &&
                                              ReadingsVal($name, "EPG_file_name", undef) ne $EPG_tt->{"File_check_DownFile"});
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
 																	    scalar(@channel_available) > 0 );
-	$getlist.= "jsonEPG:noArg ";
 
 	## reset old JSON value if modul reload
 	delete $hash->{helper}{FTUI_data} if ($cmd eq "?" && scalar(@channel_available) == 0 && exists $hash->{helper}{FTUI_data});
@@ -325,6 +316,7 @@ sub EPG_Get($$$@) {
 		"DownloadURL - http://rytecepg.epgspot.com/epg_data/\n".
 		"DownloadFile - rytecAT_Basic.xz\n".
 		"\nnote: The two attributes must be entered separately!" if (!$DownloadURL || !$DownloadFile);
+
 		## check directory and create ##
 		if (! -d "./FHEM/EPG") {
 			my $ok = mkdir("FHEM/EPG");
@@ -392,7 +384,7 @@ sub EPG_Get($$$@) {
 
 			$HTML = {};
 			if ($hash->{helper}{autoload} && $hash->{helper}{autoload} eq "yes") {
-				delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));			
+				delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
 			} else {
 				readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);						
 			}
@@ -426,7 +418,7 @@ sub EPG_Get($$$@) {
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v2", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v2Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
 		}
-		
+
 		if ($cmd =~ /loadEPG_Fav/) {
 			Log3 $name, 3, "$name: get $cmd - looking for favorite shows with $Variant";
 			return "still in development - $cmd on $Variant";
@@ -753,7 +745,14 @@ sub EPG_FW_Detail($@) {
 
 			## HTML view normal ##
 			if ($HTML_Fav == 0) {
+				## time now - normal
 				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
+
+				## time recalculation tomorrow - if now 11:30pm and view loadEPG_Prime
+				if ($hash->{helper}{last_cmd} eq "loadEPG_Prime" && $hour >= 20 && $min > 15) {
+					($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime(time() + 14440);
+				}
+
 				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			## HTML view for FavoriteShow ##
@@ -794,7 +793,7 @@ sub EPG_FW_Detail($@) {
 					}
 					$cnt_infos++;
 
-					## check HMT information old ? ##
+					## check HTML information old ? ##
 					if ( (($end_timstamp * 1 - time()) < 0) && $EPG_auto_update eq "no") {
 						Log3 $name, 4, "$name: FW_Detail - information channel $ch are old | Broadcast already ended $end_timstamp";
 						$html_site .= sprintf("<tr class=\"%s oldinfo\">", ($cnt_infos & 1)?"odd":"even");
@@ -1116,10 +1115,11 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	delete $hash->{helper}{programm} if(defined($hash->{helper}{programm}));
+	delete $hash->{helper}{FTUI_data} if(defined($hash->{helper}{FTUI_data}));
 	delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 	delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
-	delete $hash->{helper}{FTUI_data} if(defined($hash->{helper}{FTUI_data}));
+	delete $hash->{helper}{last_cmd} if(defined($hash->{helper}{last_cmd}));
+	delete $hash->{helper}{programm} if(defined($hash->{helper}{programm}));
 
 	return undef;
 }
@@ -1654,8 +1654,10 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	## JSON data ##
 	my $data = $HTML;
-
 	my @mychannels = ();
+
+	#Log3 $name, 3, Dumper\$HTML;
+
 	foreach my $ch (keys %{$data}) {
 		## check Ch_Command for channel
 		if ($Ch_Commands) {
@@ -1663,28 +1665,36 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 				foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
 					if (exists $data->{$ch} && $d eq $ch) {
 						$data->{$d}{ch_command} = $hash->{helper}{Ch_Commands}{$d};
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, FTUI added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, JSON added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
 					}
 				}
 			}
 		}
 
-		## clean hour_diff for channel
-		for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
+		## JSON data revised
+		for (my $i=0;$i<@{$data->{$ch}{EPG}};$i++){
+			## clean hour_diff for channel
 			delete $data->{$ch}{EPG}[$i]{hour_diff} if ($data->{$ch}{EPG}[$i]{hour_diff});
+			## time start revised
+			#$data->{$ch}{EPG}[$i]{start} = EPG_StartEnd_toISO($hash,$data->{$ch}{EPG}[$i]{start}) if($data->{$ch}{EPG}[$i]{start});
+			## time end revised
+			#$data->{$ch}{EPG}[$i]{end} = EPG_StartEnd_toISO($hash,$data->{$ch}{EPG}[$i]{end}) if($data->{$ch}{EPG}[$i]{end});
 		}
 		push (@mychannels, $data->{$ch});
 	}
+
+	#Log3 $name, 3, Dumper\$HTML;
+
 	$hash->{helper}{FTUI_data} = $data;
 
 	## to test (device,cmd & csrfToken must be adapted)
 	# jsonEPG   # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=jsonEPG&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
-
 	$hash->{helper}{FTUI_data} = toJSON(\@mychannels);
 	## JSON ready
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
+	$hash->{helper}{last_cmd} = $cmd;
 }
 
 #####################
@@ -1850,6 +1860,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
+	$hash->{helper}{last_cmd} = $cmd;
 }
 
 #####################
@@ -2020,7 +2031,18 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 	return ($title, $desc, $mod_cnt);
 }
 
-#####################
+##################### ( 20200117013500 +0100 to ISO 8601 Format --> 2020-01-16T10:15:00)
+sub EPG_StartEnd_toISO($$) {
+	my ($hash, $value) = @_;
+	my $name = $hash->{NAME};
+
+	Log3 $name, 5, "$name: EPG_StartEnd_toISO input $value";
+	$value = substr($value,0,4)."-".substr($value,4,2)."-".substr($value,6,2)."T".substr($value,8,2).":".substr($value,10,2).":".substr($value,12,2);
+	Log3 $name, 5, "$name: EPG_StartEnd_toISO output $value";
+
+	return $value;
+}
+
 
 # Eval-Rückgabewert für erfolgreiches
 # Laden des Moduls
