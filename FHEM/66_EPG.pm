@@ -715,13 +715,11 @@ sub EPG_FW_Detail($@) {
 				### check, old value to must reload ### 
 				if ($EPG_auto_update eq "yes") {
 					my $TimeNow = FmtDateTime(time());
-					$TimeNow =~ s/-|:|\s//g;
 					my $reload = 0;
 
-					Log3 $name, 4, "$name: FW_Detail - look for old data";
 					foreach my $ch (sort keys %{$HTML}) {
 						for (my $i=0;$i<@{$HTML->{$ch}{EPG}};$i++){
-							if (substr($HTML->{$ch}{EPG}[$i]{end},0,-6) lt $TimeNow) {
+							if ($HTML->{$ch}{EPG}[$i]{end} lt $TimeNow) {
 								Log3 $name, 4, "$name: FW_Detail - found old data, $ch with end ".$HTML->{$ch}{EPG}[$i]{end};
 								$reload++;
 								$HTML = {};
@@ -774,7 +772,6 @@ sub EPG_FW_Detail($@) {
 
 						if ($d eq "start") {
 							$start = substr($value->{$d},11,2).":".substr($value->{$d},14,2); # $start -> 2020-01-17 11:55:00
-							my $wday;
 							my ($sec,$min,$hour,$mday,$mon,$year,$wday) = localtime(time_str2num($value->{$d}));
 							$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
 						}
@@ -1645,7 +1642,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done end         -> ".$HTML->{$ch}{EPG}[$i]{end};
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done title       -> ".$HTML->{$ch}{EPG}[$i]{title};
 
-					my $time = substr($HTML->{$ch}{EPG}[$i]{start},8,2).":".substr($HTML->{$ch}{EPG}[$i]{start},10,2)."-".substr($HTML->{$ch}{EPG}[$i]{end},8,2).":".substr($HTML->{$ch}{EPG}[$i]{end},10,2);
+					my $time = substr($HTML->{$ch}{EPG}[$i]{start},11,2).":".substr($HTML->{$ch}{EPG}[$i]{start},14,2)."-".substr($HTML->{$ch}{EPG}[$i]{end},11,2).":".substr($HTML->{$ch}{EPG}[$i]{end},14,2);
 					#Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done time fromto -> ".$time;
 					readingsBulkUpdate($hash, "x_".$ch."_".$time, $HTML->{$ch}{EPG}[$i]{title});
 				}
