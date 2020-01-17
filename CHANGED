@@ -1,3 +1,7 @@
+2020-01-17 - Update 66_EPG.pm
+
+- fix time detailview loadEPG_Prime and time after 8:15pm
+- added sub to modded time start & end
 2020-01-16 - Merge branch 'pre-release_FTUI_v2' of https://github.com/fhem/EPG into pre-release_FTUI_v2
 2020-01-16 - Automaitc updated controls and CHANGED
 2020-01-16 - Update 66_EPG.pm
