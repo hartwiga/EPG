@@ -1432,7 +1432,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 							$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
 							$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
 						}
-							
+
 						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC start new    -> $start";
 						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC end new      -> $end";
 
@@ -1510,7 +1510,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end (indern)     -> $end";
 
 					## time format better for JSON and format once intern
-					($start,$end) = EPG_StartEnd_toISO($start,$end);
+					($start,$end) = EPG_StartEnd_toISO_v1($start,$end);
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start            -> $start";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end              -> $end";
 
@@ -1727,7 +1727,6 @@ sub EPG_nonBlock_loadEPG_v2($) {
 			my $desc = "";
 			my $end;
 			my $start;
-			my $time;
 
 			if($_ =~ /<dc:subject>(.*)<\/dc:subject>/) {
 				Log3 $name, 5, "$name: nonBlock_loadEPG_v2 look for    -> ".$1." selection in $Ch_select" if ($Ch_select);
@@ -1771,14 +1770,14 @@ sub EPG_nonBlock_loadEPG_v2($) {
 			}
 
 			if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?((.*)((\n.*)?)+)]]/ && $ch_found != 0) {
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 time        -> ".$2;    # 02.11.2019 13:35 - 14:30
-				$time = $2;
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start       -> ".$4;
-				$start = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($4,0,2).substr($4,3,2) . "";
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start mod   -> ".$start;
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 time        -> ".$2;    	 # 17.01.2020 20:15 - 21:15
+
+				($start,$end) = EPG_StartEnd_toISO_v2($2,$2);
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start       -> ".$4;			 # 20:15
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 start mod   -> ".$start;  # 2020-01-17 20:15:00
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 end         -> ".$5;
-				$end = substr($2,6,4).substr($2,3,2).substr($2,0,2).substr($5,0,2).substr($5,3,2) . "";
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 end mod     -> ".$end;
+
 				$desc = $7;
 				$desc = encode_utf8($desc);
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 description -> ".$desc;
@@ -2026,15 +2025,25 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 	return ($title, $desc, $mod_cnt);
 }
 
-##################### (valid Format´s)
-# 20200116101500 +0100 to 2020-01-16T10:15:00 | Date.parse("2020-01-16T10:15:00") liefert 1579166100000
-# 20200116101500 +0100 to 2020-01-16 10:15:00 | Date.parse("2020-01-16 10:15:00") liefert 1579166100000
-
-sub EPG_StartEnd_toISO($$) {
+##################### ( valid Format´s for Date.parse() )
+# 20200116101500 +0100 to 2020-01-16T10:15:00
+# 20200116101500 +0100 to 2020-01-16 10:15:00
+sub EPG_StartEnd_toISO_v1($$) {
 	my($start, $end) = @_;
 
 	$start = substr($start,0,4)."-".substr($start,4,2)."-".substr($start,6,2)." ".substr($start,8,2).":".substr($start,10,2).":".substr($start,12,2);
 	$end = substr($end,0,4)."-".substr($end,4,2)."-".substr($end,6,2)." ".substr($end,8,2).":".substr($end,10,2).":".substr($end,12,2);
+	return ($start, $end);
+}
+
+##################### ( valid Format´s for Date.parse() )
+# 17.01.2020 20:15 - 21:15 to 2020-01-17T20:15:00
+# 17.01.2020 20:15 - 21:15 to 2020-01-17 20:15:00
+sub EPG_StartEnd_toISO_v2($$) {
+	my($start, $end) = @_;
+
+	$start = substr($start,6,4)."-".substr($start,3,2)."-".substr($start,0,2)." ".substr($start,11,2).":".substr($start,14,2).":00";
+	$end = substr($end,6,4)."-".substr($end,3,2)."-".substr($end,0,2)." ".substr($end,19,2).":".substr($end,22,2).":00";
 	return ($start, $end);
 }
 
