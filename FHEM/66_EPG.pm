@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-17 00:01:50Z HomeAuto_User $
+# $Id: 66_EPG.pm 15699 2020-01-18 16:00:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -1496,9 +1496,13 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					$descstart = 1;
 				}
 
-				$desc.= $_ if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/);  # desc - multiline line
-				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {                              # desc - multiline line end
-					$desc.= $1;
+				if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/) {           # desc - multiline line
+					chomp ($_);
+					$desc.= " ".$_;
+				}
+
+				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {                             # desc - multiline line end
+					$desc.= " ".$1;
 					$descend = 1;
 				};
 
