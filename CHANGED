@@ -1,5 +1,8 @@
 2020-01-18 - Update 66_EPG.pm
 
+- revised desc output
+2020-01-18 - Update 66_EPG.pm
+
 - revised return form jsonEPG
 - extension EPG_readingsSingleUpdate_later with reading EPG_last_loaded
 2020-01-17 - Update 66_EPG.pm
