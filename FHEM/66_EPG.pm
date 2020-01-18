@@ -15,7 +15,7 @@
 #################################################################
 # Note´s
 # -
-# - start-end JSON --> Date.parse("2020-01-16T10:15:00") liefert 1579166100000
+# -
 #################################################################
 
 package main;
@@ -245,7 +245,7 @@ sub EPG_Define($$) {
   my $lang = AttrVal("global","language","EN");
   if( $lang eq "DE"){
     $EPG_tt = \%EPG_transtable_DE;
-  }else{
+  } else {
     $EPG_tt = \%EPG_transtable_EN;
   }
 
@@ -353,11 +353,11 @@ sub EPG_Get($$$@) {
 		## to test (device,cmd & csrfToken must be adapted)
 		# jsonEPG   # http://raspberrypi:8083/fhem/?detail=EPG&dev.getEPG=EPG&cmd.getEPG=get&arg.getEPG=jsonEPG&val.getEPG=&fwcsrf=csrf_772140440757415&XHR=1
 
-		Log3 $name, 4, "$name: get $cmd - view memory";
+		Log3 $name, 4, "$name: get $cmd - view data in JSON format";
 		if (exists $hash->{helper}{FTUI_data}) {
 			return toJSON($hash->{helper}{FTUI_data});
 		} else {
-			return $EPG_tt->{"get_view_FTUI_data"};
+			return toJSON({error=>$EPG_tt->{"get_view_FTUI_data"}});
 		}
 	}
 
@@ -1673,7 +1673,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	$hash->{helper}{FTUI_data} = \@mychannels;
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
+	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
 	$hash->{helper}{last_cmd} = $cmd;
 }
 
@@ -1838,7 +1838,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	}
 
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info");
+	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
 	$hash->{helper}{last_cmd} = $cmd;
 }
 
@@ -1852,14 +1852,18 @@ sub EPG_nonBlock_abortFn($) {
 	readingsSingleUpdate($hash, "state", $EPG_tt->{"nonBlock_abortFn"},1);
 }
 
-#####################
+##################### (name,one reading,or more readings with "," cut)
 sub EPG_readingsSingleUpdate_later {
 	my ($param) = @_;
-	my ($name,$txt) = split(",", $param);
-	my $hash = $defs{$name};
+	my @parameter = split(",", $param);
+	my $hash = $defs{$parameter[0]};
 
-  Log3 $name, 4, "$name: readingsSingleUpdate_later running";
-	readingsSingleUpdate($hash, "state", $txt,1);
+  Log3 $parameter[0], 4, "$parameter[0]: readingsSingleUpdate_later running";
+
+	readingsBeginUpdate($hash);
+	readingsBulkUpdate($hash, "state", $parameter[1]) if ($parameter[1]);
+	readingsBulkUpdate($hash, "EPG_last_loaded", $parameter[2]) if ($parameter[2]);
+	readingsEndUpdate($hash, 1);
 }
 
 #####################
