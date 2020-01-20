@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-20 12:00:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-20 16:20:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -195,7 +195,6 @@ eval "use JSON;1" or $missingModulEPG .= "JSON || libjson-perl, ";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple || libxml-simple-perl, ";
 
 my @tools = ("gzip","xz");
-my @channel_available;			# $hash->{helper}{Channels_available};
 my $HTML = {};
 
 #####################
@@ -299,6 +298,7 @@ sub EPG_Get($$$@) {
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
 	$cmd2 = "" if (!$cmd2);
+	my @Channels_available = @{$hash->{helper}{Channels_available}};
 
 	my $getlist = "loadFile:noArg jsonEPG:noArg ";
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
@@ -306,10 +306,10 @@ sub EPG_Get($$$@) {
                                              ReadingsVal($name, "EPG_file_name", undef) ne $EPG_tt->{"File_check_DownFile"});
 	$getlist.= "loadEPG_Fav:noArg " if (AttrVal($name, "FavoriteShows", undef) && $Variant ne "unknown" &&
 	                                    AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" &&
-																	    scalar(@channel_available) > 0 );
+																	    scalar(@Channels_available) > 0 );
 
 	## reset old JSON value if modul reload
-	delete $hash->{helper}{FTUI_data} if ($cmd eq "?" && scalar(@channel_available) == 0 && exists $hash->{helper}{FTUI_data});
+	delete $hash->{helper}{FTUI_data} if ($cmd eq "?" && scalar(@Channels_available) == 0 && exists $hash->{helper}{FTUI_data});
 
 	if ($cmd ne "?") {
 		return "ERROR: Attribute DownloadURL or DownloadFile not right defined - Please check!\n\n<u>example:</u>\n".
@@ -342,7 +342,7 @@ sub EPG_Get($$$@) {
 
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
-		@channel_available = ();
+		$hash->{helper}{Channels_available} = ();
 
 		readingsSingleUpdate($hash, "state", $EPG_tt->{"get_available_ch"}, 1);
     $hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_available_channels", $name."|".ReadingsVal($name, "EPG_file_name", undef), "EPG_nonBlock_available_channelsDone", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
@@ -362,7 +362,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-		if ( AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" && scalar(@channel_available) > 0 ) {
+		if ( AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "" && scalar(@Channels_available) > 0 ) {
 			$getlist.= "loadEPG_now:noArg ";               # now
 			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 			$getlist.= "loadEPG_today:noArg ";             # today all
@@ -408,7 +408,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($Variant eq "teXXas_RSS" ) {
-		if (AttrVal($name, "Ch_select", undef) && scalar(@channel_available) > 0 && AttrVal($name, "Ch_select", undef) ne "") {
+		if (AttrVal($name, "Ch_select", undef) && scalar(@Channels_available) > 0 && AttrVal($name, "Ch_select", undef) ne "") {
 			$getlist.= "loadEPG_now:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "now" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
 			$getlist.= "loadEPG_Prime:noArg " if ($hash->{helper}{programm} && $hash->{helper}{programm} eq "20:15" && AttrVal($name, "Ch_select", undef) && AttrVal($name, "Ch_select", undef) ne "");
 		}
@@ -497,6 +497,7 @@ sub EPG_FW_Detail($@) {
 	my $cnt_ch_select = 0;
 	my $html_site = "";
 	my @Channels_value;
+	my @Channels_available = @{$hash->{helper}{Channels_available}};
 
   ## readjust language ##
   my $lang = AttrVal("global","language","EN");
@@ -507,7 +508,7 @@ sub EPG_FW_Detail($@) {
   }
 
 	Log3 $name, 4, "$name: FW_Detail is running (Tableview=$Table, language=$lang)";
-	Log3 $name, 5, "$name: FW_Detail - channel_available: ".scalar(@channel_available);
+	Log3 $name, 5, "$name: FW_Detail - Channels_available: ".scalar(@Channels_available);
 
 	if ($Ch_select) {
 		@Channels_value = split(",", $Ch_select);
@@ -515,7 +516,7 @@ sub EPG_FW_Detail($@) {
 		Log3 $name, 5, "$name: FW_Detail - channel_select: ".$cnt_ch_select;
 	}
 
-	if (scalar(@channel_available) > 0) {
+	if (scalar(@Channels_available) > 0) {
 		### Tablet_UI ###
 		$html_site.= '<!DOCTYPE html>';
 		$html_site.= '<html>';
@@ -574,7 +575,7 @@ sub EPG_FW_Detail($@) {
 							<tr class='even'>";
 
 			$html_site .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
-			$html_site .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@channel_available) ."</td>";
+			$html_site .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@Channels_available) ."</td>";
 			$html_site .= "<td>".$EPG_tt->{"select_ch"}.": ". $cnt_ch_select ."</td>";
 			$html_site .= "</tr></table></div>";
 		}
@@ -844,25 +845,27 @@ sub EPG_FW_Popup_Channels {
 	$Ch_sort = "";
 	my $checked = "";
 	my $checked_cnt = -1;
+	my $hash = $defs{$name};
+	my @Channels_available = @{$hash->{helper}{Channels_available}};
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
 	$html_site_ch.= "<div><table id=\"FW_Popup_Channels\" class=\"block wide\">";
 	$html_site_ch.= "<tr class=\"even\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
-	for (my $i=0; $i<scalar(@channel_available); $i++) {
-		if ($Ch_select && index($Ch_select,$channel_available[$i]) >= 0) {
+	for (my $i=0; $i<scalar(@Channels_available); $i++) {
+		if ($Ch_select && index($Ch_select,$Channels_available[$i]) >= 0) {
 			$checked_cnt++;
 			$checked = "checked";
-			if($HTML->{$channel_available[$i]}{ch_wish} && $HTML->{$channel_available[$i]}{ch_wish} < 999) {
-				$Ch_sort = $HTML->{$channel_available[$i]}{ch_wish};
+			if($HTML->{$Channels_available[$i]}{ch_wish} && $HTML->{$Channels_available[$i]}{ch_wish} < 999) {
+				$Ch_sort = $HTML->{$Channels_available[$i]}{ch_wish};
 			} else {
 				$Ch_sort = $Ch_sort[$checked_cnt] if ($Ch_sort[$checked_cnt] && $Ch_sort[$checked_cnt] ne 0);
 			}
 		}
 
 		$html_site_ch.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
-		$html_site_ch.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$channel_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $channel_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
+		$html_site_ch.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$Channels_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $Channels_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
 		$checked = "";
 		$Ch_sort = "";
 	}
@@ -1174,6 +1177,7 @@ sub EPG_nonBlock_available_channels($) {
 	my $ch_id;
 	my $ok = "ok";
 	my $additive_info = "";
+	my @Channels_available;
 
   Log3 $name, 4, "$name: nonBlocking_available_channels running";
   Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
@@ -1214,10 +1218,10 @@ sub EPG_nonBlock_available_channels($) {
 					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant" if ($ch_name && $line_cnt == 4);
 
 					## nonBlocking_available_channels set helper ##
-					if ($ch_name && (not grep /^$ch_name$/, @channel_available)) {
+					if ($ch_name && (not grep /^$ch_name$/, @Channels_available)) {
 						Log3 $name, 5, "$name: nonBlocking_available_channels added $ch_name with ch_id $ch_id";
 						$hash->{helper}{programm}{$ch_id}{name} = $ch_name;
-						push(@channel_available,$ch_name);					
+						push(@Channels_available,$ch_name);					
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
 					$hash->{helper}{programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
@@ -1226,7 +1230,7 @@ sub EPG_nonBlock_available_channels($) {
 					my @RRS = split("<item>", $_);
 					my $remove = shift @RRS;
 					for (@RRS) {
-						push(@channel_available,$1) if ($_ =~ /<dc:subject>(.*)<\/dc:subject>/);
+						push(@Channels_available,$1) if ($_ =~ /<dc:subject>(.*)<\/dc:subject>/);
 					}
 				}
 			}
@@ -1248,7 +1252,7 @@ sub EPG_nonBlock_available_channels($) {
 		# Log3 $name, 3, $hash->{helper}{programm}{$ch}{name};
 	# }
 
-	my $ch_available = join(";", @channel_available);
+	my $ch_available = join(";", @Channels_available);
 	$return = $name."|".$EPG_file_name."|".$ok."|".$Variant."|".$ch_available."|".$additive_info;
 
 	return $return;
@@ -1279,13 +1283,13 @@ sub EPG_nonBlock_available_channelsDone($) {
 		return "";
 	}
 
-  @channel_available = split(';', $ch_available);
-	@channel_available = sort @channel_available;
+  my @Channels_available = split(';', $ch_available);
+	@Channels_available = sort @Channels_available;
 
 	## check channels in attr Ch_select available in file (new available channels) ##
 	if ($Ch_select) {
 		for(my $i=0;$i<=$#Ch_select_array;$i++) {
-			if (not grep /^$Ch_select_array[$i]$/, @channel_available) {
+			if (not grep /^$Ch_select_array[$i]$/, @Channels_available) {
 				my %mod = map { ($_ => 1) }
 							grep { $_ !~ m/^$Ch_select_array[$i](:.+)?$/ }
 							split(",", $Ch_select);
@@ -1320,6 +1324,8 @@ sub EPG_nonBlock_available_channelsDone($) {
 	} else {
 		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK2"});
 	}
+
+	$hash->{helper}{Channels_available} = \@Channels_available;
 }
 
 #####################
@@ -1806,8 +1812,6 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	$HTML = decode_json($json_HTML);
-
-	#Log3 $name, 3, "$name: nonBlock_loadEPG_v2Done ".Dumper\$HTML;
 
 	if ($Ch_Info_to_Reading eq "yes") {
 		## delete old Readings ##
