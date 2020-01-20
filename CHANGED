@@ -1,5 +1,8 @@
 2020-01-20 - Update 66_EPG.pm
 
+- remove globale variable "channel_available" to helper "$hash->{helper}{Channels_available}"
+2020-01-20 - Update 66_EPG.pm
+
 - code revised
 2020-01-20 - Update 66_EPG.pm
 
