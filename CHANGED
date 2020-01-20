@@ -1,3 +1,6 @@
+2020-01-20 - Merge pull request #1 from fhem/pre-release_ext_JSON
+
+extension Pre release
 2020-01-20 - Update 66_EPG.pm
 
 - users can read last data in JSON format (example for FTUI users)
