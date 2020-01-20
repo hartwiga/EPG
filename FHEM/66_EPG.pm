@@ -195,7 +195,7 @@ eval "use JSON;1" or $missingModulEPG .= "JSON || libjson-perl, ";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple || libxml-simple-perl, ";
 
 my @tools = ("gzip","xz");
-my @channel_available;			# $hash->{helper}{channel_available};
+my @channel_available;			# $hash->{helper}{Channels_available};
 my $HTML = {};
 
 #####################
@@ -1111,11 +1111,9 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	delete $hash->{helper}{FTUI_data} if(defined($hash->{helper}{FTUI_data}));
-	delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
-	delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
-	delete $hash->{helper}{last_cmd} if(defined($hash->{helper}{last_cmd}));
-	delete $hash->{helper}{programm} if(defined($hash->{helper}{programm}));
+	foreach my $value (qw(Channels_available FTUI_data HTML autoload last_cmd programm)) {
+		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
+	}
 
 	return undef;
 }
