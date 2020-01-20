@@ -195,7 +195,7 @@ eval "use JSON;1" or $missingModulEPG .= "JSON || libjson-perl, ";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple || libxml-simple-perl, ";
 
 my @tools = ("gzip","xz");
-my @channel_available;
+my @channel_available;			# $hash->{helper}{channel_available};
 my $HTML = {};
 
 #####################
