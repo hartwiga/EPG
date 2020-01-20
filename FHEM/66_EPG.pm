@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 15699 2020-01-18 16:00:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-20 12:00:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -271,7 +271,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200117";
+	$hash->{VERSION} = "20200120";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
