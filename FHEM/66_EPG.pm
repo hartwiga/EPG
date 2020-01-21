@@ -493,7 +493,8 @@ sub EPG_FW_Detail($@) {
 	my $cnt_ch_select = 0;
 	my $html_site = "";
 	my @Channels_value;
-	my @Channels_available = @{$hash->{helper}{Channels_available}};
+	my @Channels_available;
+	@Channels_available = @{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
 	my $HTML = $hash->{helper}{HTML};
 
   ## readjust language ##
@@ -1594,7 +1595,6 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
-	my $FTUI_support = AttrVal($name, "FTUI_support", "off");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 
