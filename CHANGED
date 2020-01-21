@@ -1,3 +1,4 @@
+2020-01-21 - Merge branch 'pre-release_expanded' of https://github.com/fhem/EPG into pre-release_expanded
 2020-01-21 - Update 66_EPG.pm
 
 - remove AttrVal FTUI_support
