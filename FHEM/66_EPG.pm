@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-21 15:20:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-21 19:20:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -2242,15 +2242,15 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 		<a name="jsonEPG"></a>
 		<li>jsonEPG: gibt die geladen Informationen im JSON Format zurück</li><a name=""></a>
 		<a name="loadEPG_now"></a>
-		<li>loadEPG_now: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom jetzigen Zeitpunkt</li><a name=""></a>
+		<li>loadEPG_now: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom jetzigen Zeitpunkt</li><a name=""></a>
 		<a name="loadEPG_Fav"></a>
-		<li>loadEPG_Fav: l&auml;d die EPG-Daten der definierten Titel des Attributes <code>FavoriteShows</code></li><a name=""></a>
+		<li>loadEPG_Fav: l&auml;dt die EPG-Daten der definierten Titel des Attributes <code>FavoriteShows</code></li><a name=""></a>
 		<a name="loadEPG_Prime"></a>
-		<li>loadEPG_Prime: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
+		<li>loadEPG_Prime: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
 		<a name="loadEPG_today"></a>
-		<li>loadEPG_today: l&auml;d die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
+		<li>loadEPG_today: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
 		<a name="loadFile"></a>
-		<li>loadFile: l&auml;d die Datei mit den Informationen herunter</li><a name=""></a>
+		<li>loadFile: l&auml;dt die Datei mit den Informationen herunter</li><a name=""></a>
 	</ul>
 <br><br>
 
