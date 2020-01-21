@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-21 11:20:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-21 15:20:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -14,7 +14,7 @@
 # *.xz      -> ohne Dateiendung nach unpack
 #################################################################
 # Note´s
-# -
+# - test option teXXas with this standings
 # -
 #################################################################
 
@@ -485,7 +485,7 @@ sub EPG_FW_Detail($@) {
 	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
-	my $HTML_Fav = 0;
+	my $HTML_Fav = 0;                                               # FavoriteShow
 	my $HTML = $hash->{helper}{HTML};
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
@@ -838,9 +838,8 @@ sub EPG_FW_Popup_Channels {
 	my $name = shift;
 	my $html_site_ch = "";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
-	my $Ch_sort = AttrVal($name, "Ch_sort", undef);
-	my @Ch_sort = split(",",$Ch_sort) if (AttrVal($name, "Ch_sort", undef));
-	$Ch_sort = "";
+	my $Ch_sort = AttrVal($name, "Ch_sort", "");
+	my @Ch_sort = split(",",$Ch_sort) if ($Ch_sort ne "");
 	my $checked = "";
 	my $checked_cnt = -1;
 	my $hash = $defs{$name};
@@ -1092,11 +1091,9 @@ sub EPG_Notify($$) {
 	my ($hash, $dev_hash) = @_;
 	my $name = $hash->{NAME};
 	my $typ = $hash->{TYPE};
-	return "" if(IsDisabled($name));	                                        # Return without any further action if the module is disabled
-	my $devName = $dev_hash->{NAME};	                                        # Device that created the events
+	return "" if(IsDisabled($name));	               # Return without any further action if the module is disabled
+	my $devName = $dev_hash->{NAME};	               # Device that created the events
 	my $events = deviceEvents($dev_hash, 1);
-	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
-	my $Variant = AttrVal($name, "Variant", undef);
 
 	if($devName eq "global" && grep(m/^INITIALIZED|REREADCFG$/, @{$events}) && $typ eq "EPG") {
 		Log3 $name, 5, "$name: Notify is running and starting";
@@ -1116,7 +1113,6 @@ sub EPG_Undef($$) {
 	foreach my $value (qw(Channels_available FTUI_data HTML autoload last_cmd programm)) {
 		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
-
 	return undef;
 }
 
@@ -1346,7 +1342,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my @local = (localtime(time+$off_h*60*60));
 	my $TimeLocaL_GMT_Diff = $gmt[2]-$local[2] + ($gmt[5] <=> $local[5] || $gmt[7] <=> $local[7])*24;
 
-	my $EPG_info = "";
+	my $EPG_info = "";         # info for user via EPG_readingsSingleUpdate_later
 	my $ch_found = 0;          # counter to verification ch
 	my $ch_id = "";            # TV channel channel id
 	my $ch_name = "";          # TV channel display-name
@@ -1363,6 +1359,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $title_wish;            # TV marker for loadEPG_Fav
 	my $today_end = "";        # today time end
 	my $today_start = "";      # today time start
+	my $last_loaded = "";      # for Reading EPG_last_loaded
 
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my @Ch_sort_array = split(",",$Ch_sort) if ($Ch_sort);
@@ -1382,6 +1379,10 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	$TimeNow =~ s/-|:|\s//g;
 	$TimeNow.= " $TimeLocaL_GMT_Diff";                       # loadEPG_now   20191016150432 +0200
 
+	if ($cmd =~ /loadEPG_now/) {
+		$last_loaded = substr($TimeNow,0,8)."_".substr($TimeNow,8,4);
+	}
+
 	if ($cmd =~ /loadEPG_Prime/) {
 		if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
 			my @time = split(/-|\s|:/,FmtDateTime(time()));
@@ -1392,21 +1393,23 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
 			substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
 		}
+		$last_loaded = substr($TimeNow,0,8)."_2015";
 	}
 	
 	if ($cmd =~ /loadEPG_today/) {                           # Beginn und Ende von heute bestimmen
 		$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
 		$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
+		$last_loaded = substr($today_start,0,8)."_0000";
 	}
 
 	if ($cmd =~ /loadEPG/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
 		$TimeNow = $cmd2;
 		$TimeNow =~ s/_//g;
 		$TimeNow.= "10 $TimeLocaL_GMT_Diff";
+		$last_loaded = substr($TimeNow,0,8)."_".substr($TimeNow,8,4);
 	}
 	
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | TimeNow          -> $TimeNow";
-	#Log3 $name, 3, "$name: nonBlock_loadEPG_v1 ".Dumper\$hash->{helper}{programm};
 
 	if (-e "./FHEM/EPG/$EPG_file_name") {
 		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
@@ -1582,15 +1585,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	$json_HTML = "" if ($data_found == -1);
 	Log3 $name, 5, "$name: nonBlock_loadEPG_v1 value JSON for delivery: $json_HTML";
 
-	$cmd = $cmd." ".$cmd2 if ($cmd2);
-	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
+	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$cmd2."|".$json_HTML."|".$last_loaded;
 	return $return;
 }
 
 #####################
 sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
-	my ($name, $EPG_file_name, $EPG_info, $cmd, $json_HTML) = split("\\|", $string);
+	my ($name, $EPG_file_name, $EPG_info, $cmd, $cmd2, $json_HTML, $last_loaded) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
@@ -1683,7 +1685,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{last_cmd} = $cmd;
 
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
+	my $text = $cmd2 ne "" ? $cmd."__".$last_loaded : $cmd."_".$last_loaded;
+	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
 }
 
 #####################
@@ -1810,7 +1813,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
 	delete($hash->{helper}{RUNNING_PID});
-	
+
 	$json_HTML = eval {encode_utf8( $json_HTML )};
 	my $HTML = decode_json($json_HTML);
 
