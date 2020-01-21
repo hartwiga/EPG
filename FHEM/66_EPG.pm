@@ -486,16 +486,16 @@ sub EPG_FW_Detail($@) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my $HTML_Fav = 0;
+	my $HTML = $hash->{helper}{HTML};
 	my $Table = AttrVal($name, "Table", "on");
 	my $Table_view_Subtitle = "";
 	my $Variant = AttrVal($name, "Variant", undef);
 	my $cnt_ch = 0;
 	my $cnt_ch_select = 0;
 	my $html_site = "";
-	my @Channels_value;
+	my @Channels_select;
 	my @Channels_available;
 	@Channels_available = @{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
-	my $HTML = $hash->{helper}{HTML};
 
   ## readjust language ##
   my $lang = AttrVal("global","language","EN");
@@ -509,8 +509,8 @@ sub EPG_FW_Detail($@) {
 	Log3 $name, 5, "$name: FW_Detail - Channels_available: ".scalar(@Channels_available);
 
 	if ($Ch_select) {
-		@Channels_value = split(",", $Ch_select);
-		$cnt_ch_select = scalar(@Channels_value);
+		@Channels_select = split(",", $Ch_select);
+		$cnt_ch_select = scalar(@Channels_select);
 		Log3 $name, 5, "$name: FW_Detail - channel_select: ".$cnt_ch_select;
 	}
 
