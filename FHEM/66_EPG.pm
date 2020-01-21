@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-20 16:20:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-21 11:20:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -76,7 +76,6 @@ my %EPG_transtable_EN = (
     "tv_name"             =>  "TV station name",
 		## EPG_FW_set_Attr_Channels ##
     "set_Attr_Ch_eq"      =>  "no channel selected",
-    "set_Attr_Ch_state"   =>  "EPG available with get loadEPG command",
 		## EPG_ParseHttpResponse ##
 		"ParseHttp_Http_URL"  =>  "DownloadURL was not found",
 		"ParseHttp_Http_file" =>  "DownloadFile was not found on URL",
@@ -155,7 +154,6 @@ my %EPG_transtable_EN = (
     "tv_name"             =>  "TV Sendername",
 		## EPG_FW_set_Attr_Channels ##
     "set_Attr_Ch_eq"      =>  "keinen Kanal ausgewählt",
-    "set_Attr_Ch_state"   =>  "EPG verfügbar mit dem Befehl get loadEPG",
 		## EPG_ParseHttpResponse ##
 		"ParseHttp_Http_URL"  =>  "DownloadURL wurde nicht gefunden",
 		"ParseHttp_Http_file" =>  "DownloadFile wurde in der URL nicht gefunden",
@@ -195,7 +193,6 @@ eval "use JSON;1" or $missingModulEPG .= "JSON || libjson-perl, ";
 eval "use XML::Simple;1" or $missingModulEPG .= "XML::Simple || libxml-simple-perl, ";
 
 my @tools = ("gzip","xz");
-my $HTML = {};
 
 #####################
 sub EPG_Initialize($) {
@@ -270,7 +267,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200120";
+	$hash->{VERSION} = "20200121";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -293,12 +290,12 @@ sub EPG_Set($$$@) {
 #####################
 sub EPG_Get($$$@) {
 	my ( $hash, $name, $cmd, @a ) = @_;
-	my $cmd2 = $a[0];
+	my $cmd2 = defined $a[0] ? $a[0] : "";
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
-	$cmd2 = "" if (!$cmd2);
-	my @Channels_available = @{$hash->{helper}{Channels_available}};
+	my @Channels_available;
+	@Channels_available = \@{$hash->{helper}{Channels_available}} if ({$hash->{helper}{Channels_available}});
 
 	my $getlist = "loadFile:noArg jsonEPG:noArg ";
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
@@ -342,7 +339,7 @@ sub EPG_Get($$$@) {
 
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
-		$hash->{helper}{Channels_available} = ();
+		delete $hash->{helper}{Channels_available};
 
 		readingsSingleUpdate($hash, "state", $EPG_tt->{"get_available_ch"}, 1);
     $hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_available_channels", $name."|".ReadingsVal($name, "EPG_file_name", undef), "EPG_nonBlock_available_channelsDone", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
@@ -385,7 +382,7 @@ sub EPG_Get($$$@) {
 		if ($cmd =~ /^loadEPG/ && $cmd !~ /loadEPG_Fav/) {
 			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 
-			$HTML = {};
+			delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 			if ($hash->{helper}{autoload} && $hash->{helper}{autoload} eq "yes") {
 				delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
 			} else {
@@ -393,7 +390,6 @@ sub EPG_Get($$$@) {
 			}
 
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
-
 			$hash->{helper}{RUNNING_PID} = BlockingCall("EPG_nonBlock_loadEPG_v1", $name."|".ReadingsVal($name, "EPG_file_name", undef)."|".$cmd."|".$cmd2, "EPG_nonBlock_loadEPG_v1Done", 60 , "EPG_nonBlock_abortFn", $hash) unless(exists($hash->{helper}{RUNNING_PID}));
 			return undef;
 		}
@@ -414,7 +410,7 @@ sub EPG_Get($$$@) {
 		}
  		
 		if ($cmd =~ /^loadEPG/ && $cmd !~ /^loadEPG_Fav/) {
-			$HTML = {};
+			delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - starting blocking call";
 
@@ -498,6 +494,7 @@ sub EPG_FW_Detail($@) {
 	my $html_site = "";
 	my @Channels_value;
 	my @Channels_available = @{$hash->{helper}{Channels_available}};
+	my $HTML = $hash->{helper}{HTML};
 
   ## readjust language ##
   my $lang = AttrVal("global","language","EN");
@@ -847,6 +844,7 @@ sub EPG_FW_Popup_Channels {
 	my $checked_cnt = -1;
 	my $hash = $defs{$name};
 	my @Channels_available = @{$hash->{helper}{Channels_available}};
+	my $HTML = $hash->{helper}{HTML};
 
 	Log3 $name, 4, "$name: FW_Channels is running";
 
@@ -883,6 +881,7 @@ sub EPG_FW_set_Attr_Channels {
 	my @Ch_select_array = split(",",$Ch_select);
 	my $Ch_sort = shift;
 	my @Ch_sort_array = split(",",$Ch_sort);
+	my $HTML = $hash->{helper}{HTML};
 
 	Log3 $name, 4, "$name: FW_set_Attr_Channels is running";
 	Log3 $name, 5, "$name: FW_set_Attr_Channels Ch_select $Ch_select";
@@ -893,12 +892,12 @@ sub EPG_FW_set_Attr_Channels {
 		CommandDeleteAttr($hash,"$name Ch_select");
 		CommandDeleteAttr($hash,"$name Ch_sort");
 		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
-		$HTML = {};
+		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 
 		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 	} else {
 		Log3 $name, 4, "$name: FW_set_Attr_Channels new Channels set";
-		$HTML = {};
+		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 		CommandAttr($hash,"$name Ch_select $Ch_select");
 		if ($Ch_sort !~ /^[0,]+$/) {
 			CommandAttr($hash,"$name Ch_sort $Ch_sort");
@@ -917,9 +916,8 @@ sub EPG_FW_set_Attr_Channels {
 				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
-		readingsSingleUpdate($hash, "state" , $EPG_tt->{"set_Attr_Ch_state"}, 1);
+		CommandGet($hash, "$name $hash->{helper}{last_cmd}");
 	}
-	#Log3 $name, 5, "$name: FW_set_Attr_Channels ".Dumper\$HTML;
 }
 
 ##################### (SAVE Button on PopUp -> Anpassung Attribute Channels)
@@ -1401,9 +1399,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	}
 
 	if ($cmd =~ /loadEPG/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
-		$cmd2 =~ s/_//g;
-		$cmd2.= "10 $TimeLocaL_GMT_Diff";
 		$TimeNow = $cmd2;
+		$TimeNow =~ s/_//g;
+		$TimeNow.= "10 $TimeLocaL_GMT_Diff";
 	}
 	
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | TimeNow          -> $TimeNow";
@@ -1581,8 +1579,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $json_HTML;
 	$json_HTML = JSON->new->utf8(0)->encode($hash->{helper}{HTML}) if ($data_found != -1);
 	$json_HTML = "" if ($data_found == -1);
-
 	Log3 $name, 5, "$name: nonBlock_loadEPG_v1 value JSON for delivery: $json_HTML";
+
+	$cmd = $cmd." ".$cmd2 if ($cmd2);
 	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$json_HTML;
 	return $return;
 }
@@ -1605,8 +1604,8 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	delete($hash->{helper}{RUNNING_PID});
 	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
-	$HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
-
+	my $HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
+	
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done found ".scalar(keys %{$HTML})." broadcast information";
 	if (scalar(keys %{$HTML}) <= 0 && $EPG_auto_download eq "yes") {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done found 0 broadcast information, process automatic download started";
@@ -1680,9 +1679,11 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	}
 
 	$hash->{helper}{FTUI_data} = \@mychannels;
+	$hash->{helper}{HTML} = $HTML;
+	$hash->{helper}{last_cmd} = $cmd;
+
 	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
-	$hash->{helper}{last_cmd} = $cmd;
 }
 
 #####################
@@ -1811,7 +1812,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	delete($hash->{helper}{RUNNING_PID});
 	
 	$json_HTML = eval {encode_utf8( $json_HTML )};
-	$HTML = decode_json($json_HTML);
+	my $HTML = decode_json($json_HTML);
 
 	if ($Ch_Info_to_Reading eq "yes") {
 		## delete old Readings ##
@@ -1843,9 +1844,11 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 		}
 	}
 
+	$hash->{helper}{last_cmd} = $cmd;
+	$hash->{helper}{HTML} = $HTML;
+
 	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
-	$hash->{helper}{last_cmd} = $cmd;
 }
 
 #####################
