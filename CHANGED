@@ -1,3 +1,8 @@
+2020-01-22 - Update 66_EPG.pm
+
+- rename attrib Ch_Commands to Ch_commands
+- revised commandref
+- changed name FAV in sort on "list of all available channels"
 2020-01-21 - Update 66_EPG.pm
 
 - revised commandref #msg1015632
