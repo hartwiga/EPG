@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-21 19:20:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-22 12:20:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -15,7 +15,7 @@
 #################################################################
 # Note´s
 # - test option teXXas with this standings
-# -
+# - update "Probably associated with" if Ch_Command set
 #################################################################
 
 package main;
@@ -72,7 +72,7 @@ my %EPG_transtable_EN = (
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "active",
     "no"                  =>  "no.",
-    "tv_fav"              =>  "FAV",
+    "tv_fav"              =>  "sort",
     "tv_name"             =>  "TV station name",
 		## EPG_FW_set_Attr_Channels ##
     "set_Attr_Ch_eq"      =>  "no channel selected",
@@ -150,7 +150,7 @@ my %EPG_transtable_EN = (
 		## EPG_FW_Popup_Channels ##
     "active"              =>  "aktiv",
     "no"                  =>  "Nr.",
-    "tv_fav"              =>  "FAV",
+    "tv_fav"              =>  "sort",
     "tv_name"             =>  "TV Sendername",
 		## EPG_FW_set_Attr_Channels ##
     "set_Attr_Ch_eq"      =>  "keinen Kanal ausgewählt",
@@ -207,7 +207,7 @@ sub EPG_Initialize($) {
   $hash->{FW_detailFn}           = "EPG_FW_Detail";
 	$hash->{FW_deviceOverview}     = 1;
 	$hash->{FW_addDetailToSummary} = 1;  # displays html in fhemweb room-view
-	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no Ch_Commands:textField-long ".
+	$hash->{AttrList}              =	"Ch_select Ch_sort Ch_Info_to_Reading:yes,no Ch_commands:textField-long ".
                                     "DownloadFile DownloadURL HTTP_TimeOut ".
 																		"EPG_auto_download:yes,no EPG_auto_update:yes,no ".
 																		"FavoriteShows ".
@@ -267,7 +267,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200121";
+	$hash->{VERSION} = "20200122";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -460,7 +460,7 @@ sub EPG_Attr() {
 			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
 		}
 
-		if ($attrName eq "Ch_Commands") {
+		if ($attrName eq "Ch_commands") {
 			return "ERROR: The command must informat { \" \" => \" \" }" if ($attrValue !~ /\s?+{\X+=>\X+}/);
 			my $err = perlSyntaxCheck($attrValue, ());   # check PERL Code
 			return $err if($err);
@@ -482,7 +482,7 @@ sub EPG_Attr() {
 sub EPG_FW_Detail($@) {
 	my ($FW_wname, $name, $room, $pageHash) = @_;
 	my $hash = $defs{$name};
-	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
+	my $Ch_commands = AttrVal($name,"Ch_commands", undef);
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my $HTML_Fav = 0;                                               # FavoriteShow
@@ -664,22 +664,22 @@ sub EPG_FW_Detail($@) {
 			return $html_site;
 		}
 
-		## Ch_Commands check and sort in ##
-		if ($Ch_Commands) {
-      if( $Ch_Commands =~ m/^\{.*\}$/s && $Ch_Commands =~ m/=>/ && $Ch_Commands !~ m/\$/ ) {
-        my $av = eval $Ch_Commands;
+		## Ch_commands check and sort in ##
+		if ($Ch_commands) {
+      if( $Ch_commands =~ m/^\{.*\}$/s && $Ch_commands =~ m/=>/ && $Ch_commands !~ m/\$/ ) {
+        my $av = eval $Ch_commands;
         if( $@ ) {
           Log3 $name, 3, "$name: FW_Detail - Ch_Command, ERROR: ". $@;
         } else {
-          $Ch_Commands = $av if( ref($av) eq "HASH" );
+          $Ch_commands = $av if( ref($av) eq "HASH" );
         }
       }
-      $hash->{helper}{Ch_Commands} = $Ch_Commands;
+      $hash->{helper}{Ch_commands} = $Ch_commands;
 
-			foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
+			foreach my $d (keys %{$hash->{helper}{Ch_commands}}) {
 				if (exists $HTML->{$d}) {
-					$HTML->{$d}{Ch_Command} = $hash->{helper}{Ch_Commands}{$d};
-					Log3 $name, 4, "$name: FW_Detail - Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+					$HTML->{$d}{Ch_Command} = $hash->{helper}{Ch_commands}{$d};
+					Log3 $name, 4, "$name: FW_Detail - Ch_Command for $d => " . $hash->{helper}{Ch_commands}{$d};
 				}
 			}
 		}
@@ -1594,7 +1594,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
 	my ($name, $EPG_file_name, $EPG_info, $cmd, $cmd2, $json_HTML, $last_loaded) = split("\\|", $string);
   my $hash = $defs{$name};
-	my $Ch_Commands = AttrVal($name,"Ch_Commands", undef);
+	my $Ch_commands = AttrVal($name,"Ch_commands", undef);
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
@@ -1667,12 +1667,12 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	foreach my $ch (keys %{$HTML}) {
 		## check Ch_Command for channel
-		if ($Ch_Commands) {
-			if (grep /$ch/, $Ch_Commands) {
-				foreach my $d (keys %{$hash->{helper}{Ch_Commands}}) {
+		if ($Ch_commands) {
+			if (grep /$ch/, $Ch_commands) {
+				foreach my $d (keys %{$hash->{helper}{Ch_commands}}) {
 					if (exists $HTML->{$ch} && $d eq $ch) {
-						$HTML->{$d}{ch_command} = $hash->{helper}{Ch_Commands}{$d};
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, JSON added Ch_Command for $d => " . $hash->{helper}{Ch_Commands}{$d};
+						$HTML->{$d}{ch_command} = $hash->{helper}{Ch_commands}{$d};
+						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, JSON added Ch_Command for $d => " . $hash->{helper}{Ch_commands}{$d};
 					}
 				}
 			}
@@ -2138,13 +2138,7 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 
 <b>Attribute</b><br>
 	<ul><li><a href="#disable">disable</a></li></ul><br>
-	<ul><li><a name="Ch_select">Ch_select</a><br>
-	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired channels.<br>
-	<i>Normally you do not have to edit this attribute manually.</i></li><a name=" "></a></ul><br>
-	<ul><li><a name="Ch_sort">Ch_sort</a><br>
-	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired new channelnumbre.<br>
-	<i>Normally you do not have to edit this attribute manually. Once you clear this attribute, there is no manual sort!</i></li><a name=" "></a></ul><br>
-	<ul><li><a name="Ch_Commands">Ch_Commands</a><br>
+	<ul><li><a name="Ch_commands">Ch_commands</a><br>
 	This allows commands to be assigned to the transmitters, which are executed when the transmitter is clicked.<br>
 	The transmitter is shown as a link in the table. Important, take over the channel name correctly!<br><br>
 	<u>Example code to assign a FHEM command to 2 transmitters:</u><br>
@@ -2152,6 +2146,12 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 	"Das Erste" => "set Fernsehr_LG channel 1",<br>
 	"ZDF" => "set Lampe off"<br>
 	}</code><br></a></ul><br>
+	<ul><li><a name="Ch_select">Ch_select</a><br>
+	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired channels.<br>
+	<i>Normally you do not have to edit this attribute manually.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_sort">Ch_sort</a><br>
+	This attribute will be filled automatically after entering the control panel "<code>list of all available channels</code>" and defined the desired new channelnumbre.<br>
+	<i>Normally you do not have to edit this attribute manually. Once you clear this attribute, there is no manual sort!</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
 	You can write the data in readings (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
@@ -2256,13 +2256,7 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 
 <b>Attribute</b><br>
 	<ul><li><a href="#disable">disable</a></li></ul><br>
-	<ul><li><a name="Ch_select">Ch_select</a><br>
-	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschten Kan&auml;le definierte.<br>
-	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten.</i></li><a name=" "></a></ul><br>
-	<ul><li><a name="Ch_sort">Ch_sort</a><br>
-	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschte neue Kanalnummer definierte.<br>
-	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten. Sobald man dieses Attribut l&ouml;scht, ist keine manuelle Sortierung vorhanden!</i></li><a name=" "></a></ul><br>
-	<ul><li><a name="Ch_Commands">Ch_Commands</a><br>
+	<ul><li><a name="Ch_commands">Ch_commands</a><br>
 	Hiermit kann den Sendern Kommandos zuweisen, welche ausgef&uuml;hrt werden beim Klick auf den Sender.<br>
 	Die Darstellung des Senders erfolgt als Link in der Tabelle. Wichtig, Sendernamen richtig &uuml;bernehmen!<br><br>
 	<u>Beispielcode um 2 Sendern einen FHEM Befehl zuzuweisen:</u><br>
@@ -2270,6 +2264,12 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 	"Das Erste" => "set Fernsehr_LG channel 1",<br>
 	"ZDF" => "set Lampe off"<br>
 	}</code><br></a></ul><br>
+	<ul><li><a name="Ch_select">Ch_select</a><br>
+	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschten Kan&auml;le definierte.<br>
+	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten.</i></li><a name=" "></a></ul><br>
+	<ul><li><a name="Ch_sort">Ch_sort</a><br>
+	Dieses Attribut wird automatisch gef&uuml;llt nachdem man im Control panel mit "<code>list of all available channels</code>" die gew&uuml;nschte neue Kanalnummer definierte.<br>
+	<i>Im Normalfall muss man dieses Attribut nicht manuel bearbeiten. Sobald man dieses Attribut l&ouml;scht, ist keine manuelle Sortierung vorhanden!</i></li><a name=" "></a></ul><br>
 	<ul><li><a name="Ch_Info_to_Reading">Ch_Info_to_Reading</a><br>
 	Hiermit kann man die Daten in Readings schreiben lassen (yes | no = default)</a></ul><br>
 	<ul><li><a name="DownloadFile">DownloadFile</a><br>
