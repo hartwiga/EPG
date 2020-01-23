@@ -1,3 +1,7 @@
+2020-01-23 - Update 66_EPG.pm
+
+- revised code for cmd FavTitle & FavDesc
+- remove some variables
 2020-01-22 - Update 66_EPG.pm
 
 - rename attrib Ch_Commands to Ch_commands
