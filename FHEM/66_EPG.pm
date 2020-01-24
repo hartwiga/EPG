@@ -474,7 +474,6 @@ sub EPG_Attr() {
 					my $associatedWith = "";
 
 					foreach my $d (keys %{$Ch_commands}) {
-						Log3 $name, 3, "$name: Attr - $attrName, ".$Ch_commands->{$d};
 						if ($Ch_commands->{$d} =~ /(get|set)\s(\w+)\s/) {
 							if ($2) {
 								Log3 $name, 5, "$name: Attr - $attrName, PawList | found: ".$2;
