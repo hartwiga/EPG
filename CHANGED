@@ -1,5 +1,8 @@
 2020-01-24 - Update 66_EPG.pm
 
+- remove logoutput
+2020-01-24 - Update 66_EPG.pm
+
 - revised code
 - added cmd device to "Probably associated with" list
 - rename variables & helper names
