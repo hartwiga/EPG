@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-24 15:45:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-24 17:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -798,7 +798,7 @@ sub EPG_FW_Detail($@) {
 					## onclick Kanal wenn Kommando vorhanden ##
 					my $click_ch;
 					if (exists $HTML->{$ch}{Ch_command}) {
-						Log3 $name, 4, "$name: FW_Detail - Ch_command for $ch set to ".$HTML->{$ch}{Ch_command};
+						Log3 $name, 5, "$name: FW_Detail - Ch_command, onclick for $ch -> ".$HTML->{$ch}{Ch_command};
 						$click_ch = "<a href=\"#!\" onclick=\"FW_cmd('/fhem?XHR=1&cmd=$HTML->{$ch}{Ch_command}')\">$ch</a>";
 					} else {
 						$click_ch = "$ch";
@@ -1434,13 +1434,13 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 						my @start_new = split("",$start);
 						my @end_new = split("",$end);
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | ".'sec | min | hour | mday | month | year';
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $start_new[12]$start_new[13]  | $start_new[10]$start_new[11]  |  $start_new[8]$start_new[9]  | $start_new[6]$start_new[7]   | $start_new[4]$start_new[5]    | $start_new[0]$start_new[1]$start_new[2]$start_new[3]";
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | $end_new[12]$end_new[13]  | $end_new[10]$end_new[11]  |  $end_new[8]$end_new[9]  | $end_new[6]$end_new[7]   | $end_new[4]$end_new[5]    | $end_new[0]$end_new[1]$end_new[2]$end_new[3]";
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC start        -> ".fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900));
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | UTC end          -> ".fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$end_new[2].$end_new[3])*1-1900));
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | start            -> $start";             # 20191023211500 +0000
+						# Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end              -> $end";               # 20191023223000 +0000
 
 						if (index($hour_diff,"-")) {
 							$start = fhemTimeLocal(($start_new[12].$start_new[13]), ($start_new[10].$start_new[11]), ($start_new[8].$start_new[9]), ($start_new[6].$start_new[7]), (($start_new[4].$start_new[5])*1-1), (($start_new[0].$start_new[1].$start_new[2].$start_new[3])*1-1900)) + (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
@@ -1450,9 +1450,6 @@ sub EPG_nonBlock_loadEPG_v1($) {
 							$end = fhemTimeLocal(($end_new[12].$end_new[13]), ($end_new[10].$end_new[11]), ($end_new[8].$end_new[9]), ($end_new[6].$end_new[7]), (($end_new[4].$end_new[5])*1-1), (($end_new[0].$end_new[1].$start_new[2].$start_new[3])*1-1900)) - (60*60*abs(substr($TimeLocaL_GMT_Diff,2,1)));
 						}
 
-						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC start new    -> $start";
-						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | UTC end new      -> $end";
-
 						$start = FmtDateTime($start);
 						$end = FmtDateTime($end);
 						$start =~ s/-|:|\s//g;
@@ -1460,8 +1457,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						$start.= " $TimeLocaL_GMT_Diff";
 						$end.= " $TimeLocaL_GMT_Diff";
 
-						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start new        -> $start";
-						#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
+						# Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start new        -> $start";
+						# Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
 					}
 
 					if ($cmd !~ /loadEPG_Fav/ && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
@@ -1491,10 +1488,6 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						$descend = 1;
 					}
 
-					if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0) { # desc - multiline line
-						$desc = $2;
-						$descstart = 1;
-					}
 				### title subtitle desc if always ###
 				} else {
 					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/);                # title
@@ -1505,6 +1498,11 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						$descstart = 1;
 						$descend = 1;
 					}
+				}
+
+				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0) { # desc - multiline line
+					$desc = $2;
+					$descstart = 1;
 				}
 
 				if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/) {           # desc - multiline line
