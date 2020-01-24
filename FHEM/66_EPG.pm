@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-23 20:00:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-01-24 15:45:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -269,7 +269,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200123";
+	$hash->{VERSION} = "20200124";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -297,7 +297,7 @@ sub EPG_Get($$$@) {
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
 	my @Channels_available;
-	@Channels_available = \@{$hash->{helper}{Channels_available}} if ({$hash->{helper}{Channels_available}});
+	@Channels_available = \@{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
 
 	my $getlist = "loadFile:noArg jsonEPG:noArg ";
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
@@ -386,8 +386,8 @@ sub EPG_Get($$$@) {
 			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 
 			delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
-			if ($hash->{helper}{autoload} && $hash->{helper}{autoload} eq "yes") {
-				delete $hash->{helper}{autoload} if(defined($hash->{helper}{autoload}));
+			if ($hash->{helper}{HTML_reload} && $hash->{helper}{HTML_reload} eq "yes") {
+				delete $hash->{helper}{HTML_reload} if(defined($hash->{helper}{HTML_reload}));
 			} else {
 				readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);						
 			}
@@ -463,12 +463,42 @@ sub EPG_Attr() {
 			return "ERROR: The command must informat { \" \" => \" \" }" if ($attrValue !~ /\s?+{\X+=>\X+}/);
 			my $err = perlSyntaxCheck($attrValue, ());   # check PERL Code
 			return $err if($err);
+
+			## check syntax and set Ch_command device to list "Probably associated with" ##
+			if( $attrValue =~ m/^\{.*\}$/s && $attrValue =~ m/=>/ && $attrValue !~ m/\$/ ) {
+				my $av = eval $attrValue;
+				if( $@ ) {
+					Log3 $name, 3, "$name: Attr - $attrName, ERROR: ". $@;
+				} else {
+					my $Ch_commands = $av if( ref($av) eq "HASH" );
+					my $associatedWith = "";
+
+					foreach my $d (keys %{$Ch_commands}) {
+						Log3 $name, 3, "$name: Attr - $attrName, ".$Ch_commands->{$d};
+						if ($Ch_commands->{$d} =~ /(get|set)\s(\w+)\s/) {
+							if ($2) {
+								Log3 $name, 5, "$name: Attr - $attrName, PawList | found: ".$2;
+								if (not grep /$2/, $associatedWith) {
+									$associatedWith = $associatedWith eq "" ? $2 : $associatedWith.",".$2;
+								}
+							}
+						}
+					}
+					CommandSetReading(undef, "$name .associatedWith $associatedWith");
+				}
+			} else {
+				return "ERROR: $attrName are wrong format";
+			}
 		}
 	}
 
 	if ($cmd eq "del") {
 		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
 		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavDesc" || $attrName eq "FavTitle");
+
+		if ($attrName eq "Ch_commands") {
+			readingsDelete($hash,".associatedWith") if(ReadingsVal($name, ".associatedWith", undef));
+		}
 
 		if ($attrName eq "Variant") {
 			delete $hash->{helper}{Programm} if ($hash->{helper}{Programm});
@@ -662,31 +692,10 @@ sub EPG_FW_Detail($@) {
 			return $html_site;
 		}
 
-		## Ch_commands check and sort in ##
-		if ($Ch_commands) {
-      if( $Ch_commands =~ m/^\{.*\}$/s && $Ch_commands =~ m/=>/ && $Ch_commands !~ m/\$/ ) {
-        my $av = eval $Ch_commands;
-        if( $@ ) {
-          Log3 $name, 3, "$name: FW_Detail - Ch_Command, ERROR: ". $@;
-        } else {
-          $Ch_commands = $av if( ref($av) eq "HASH" );
-        }
-      }
-      $hash->{helper}{Ch_commands} = $Ch_commands;
-
-			foreach my $d (keys %{$hash->{helper}{Ch_commands}}) {
-				if (exists $HTML->{$d}) {
-					$HTML->{$d}{Ch_Command} = $hash->{helper}{Ch_commands}{$d};
-					Log3 $name, 5, "$name: FW_Detail - Ch_Command for $d => " . $hash->{helper}{Ch_commands}{$d};
-				}
-			}
-		}
-
 		$html_site .= "<div id=\"table\"><center>- ".$EPG_tt->{"epg_info"}." -</center></div>" if not ($Ch_select && $HTML_cnt != 0);
-		#Log3 $name, 3, "$name: FW_Detail Dumper: ".Dumper\$HTML;
 
 		if ($Ch_select && $HTML_cnt != 0) {
-			my $cnt_infos = 0;
+			my $EPG_cnt = 0;
 			my $date;
 			my $desc = "";
 			my $end = "";
@@ -723,7 +732,7 @@ sub EPG_FW_Detail($@) {
 					}
 
 					if ($reload != 0) {
-						$hash->{helper}{autoload} = "yes";
+						$hash->{helper}{HTML_reload} = "yes";
 						readingsSingleUpdate($hash, "state" , $EPG_tt->{"FW_autoload"}, 1);
 						CommandGet($hash, "$name loadEPG_now");
 						return "";
@@ -750,7 +759,7 @@ sub EPG_FW_Detail($@) {
 				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"date"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."</th>".$Table_view_Subtitle."</tr>";
 			}
 
-			my @positioned = sort { $HTML->{$a}{ch_wish} <=> $HTML->{$b}{ch_wish} or lc ($HTML->{$a}{ch_name}) cmp lc ($HTML->{$b}{ch_name}) } keys %$HTML;
+			my @positioned = sort { $HTML->{$a}{Ch_sort} <=> $HTML->{$b}{Ch_sort} or lc ($HTML->{$a}{Ch_name}) cmp lc ($HTML->{$b}{Ch_name}) } keys %$HTML;
 
 			foreach my $ch (@positioned) {
 				## Kanäle ##
@@ -776,21 +785,22 @@ sub EPG_FW_Detail($@) {
 						$desc = $value->{$d} if ($d eq "desc");
 						$subtitle = $value->{$d} if ($d eq "subtitle");
 					}
-					$cnt_infos++;
+					$EPG_cnt++;
 
 					## check HTML information old ? ##
 					if ( (($end_timstamp * 1 - time()) < 0) && $EPG_auto_update eq "no") {
 						Log3 $name, 4, "$name: FW_Detail - information channel $ch are old | Broadcast already ended $end_timstamp";
-						$html_site .= sprintf("<tr class=\"%s oldinfo\">", ($cnt_infos & 1)?"odd":"even");
+						$html_site .= sprintf("<tr class=\"%s oldinfo\">", ($EPG_cnt & 1)?"odd":"even");
 					} else {
-						$html_site .= sprintf("<tr class=\"%s\">", ($cnt_infos & 1)?"odd":"even");
+						$html_site .= sprintf("<tr class=\"%s\">", ($EPG_cnt & 1)?"odd":"even");
 					}
 					$Table_view_Subtitle = "<td>$subtitle</td>" if (AttrVal($name, "Table_view_Subtitle", "no") eq "yes");
 
 					## onclick Kanal wenn Kommando vorhanden ##
 					my $click_ch;
-					if (exists $HTML->{$ch}{Ch_Command}) {
-						$click_ch = "<a href=\"#!\" onclick=\"FW_cmd('/fhem?XHR=1&cmd=$HTML->{$ch}{Ch_Command}')\">$ch</a>";
+					if (exists $HTML->{$ch}{Ch_command}) {
+						Log3 $name, 4, "$name: FW_Detail - Ch_command for $ch set to ".$HTML->{$ch}{Ch_command};
+						$click_ch = "<a href=\"#!\" onclick=\"FW_cmd('/fhem?XHR=1&cmd=$HTML->{$ch}{Ch_command}')\">$ch</a>";
 					} else {
 						$click_ch = "$ch";
 					}
@@ -826,13 +836,12 @@ sub EPG_FW_Detail($@) {
 ##################### (PopUp to view HTML for available channels)
 sub EPG_FW_Popup_Channels {
 	my $name = shift;
+	my $hash = $defs{$name};
 	my $html_site_ch = "";
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $Ch_sort = AttrVal($name, "Ch_sort", "");
 	my @Ch_sort = split(",",$Ch_sort) if ($Ch_sort ne "");
-	my $checked = "";
 	my $checked_cnt = -1;
-	my $hash = $defs{$name};
 	my @Channels_available = @{$hash->{helper}{Channels_available}};
 	my $HTML = $hash->{helper}{HTML};
 
@@ -842,11 +851,13 @@ sub EPG_FW_Popup_Channels {
 	$html_site_ch.= "<tr class=\"even\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
 
 	for (my $i=0; $i<scalar(@Channels_available); $i++) {
+		my $checked = "";
+
 		if ($Ch_select && index($Ch_select,$Channels_available[$i]) >= 0) {
 			$checked_cnt++;
 			$checked = "checked";
-			if($HTML->{$Channels_available[$i]}{ch_wish} && $HTML->{$Channels_available[$i]}{ch_wish} < 999) {
-				$Ch_sort = $HTML->{$Channels_available[$i]}{ch_wish};
+			if($HTML->{$Channels_available[$i]}{Ch_sort} && $HTML->{$Channels_available[$i]}{Ch_sort} < 999) {
+				$Ch_sort = $HTML->{$Channels_available[$i]}{Ch_sort};
 			} else {
 				$Ch_sort = $Ch_sort[$checked_cnt] if ($Ch_sort[$checked_cnt] && $Ch_sort[$checked_cnt] ne 0);
 			}
@@ -854,12 +865,10 @@ sub EPG_FW_Popup_Channels {
 
 		$html_site_ch.= sprintf("<tr class=\"%s\">", ($i & 1)?"even":"odd");
 		$html_site_ch.= "<td align=\"center\">".($i + 1)."</td><td align=\"center\"><input type=\"checkbox\" id=\"".$i."\" name=\"".$Channels_available[$i]."\" onclick=\"Checkbox(".$i.")\" $checked></td><td>". $Channels_available[$i] ."</td><td> <input type=\"text\" pattern=\"[0-9]+\" id=\"".$i."\" value=\"$Ch_sort\" maxlength=\"3\" size=\"3\"> </td></tr>";
-		$checked = "";
 		$Ch_sort = "";
 	}
 
 	$html_site_ch.= "</table></div>";
-
 	return $html_site_ch;
 }
 
@@ -895,15 +904,15 @@ sub EPG_FW_set_Attr_Channels {
 			CommandDeleteAttr($hash,"$name Ch_sort");		
 		}
 
-    ## list of all available channels - set ch_wish from HTML input ##
+    ## list of all available channels - set Ch_sort from HTML input ##
 		foreach my $i (0 .. $#Ch_select_array) {
 			if ($Ch_sort_array[$i] != 0) {
 				Log3 $name, 4, "$name: FW_set_Attr_Channels new numbre of ".$Ch_select_array[$i]." set to ".$Ch_sort_array[$i];
-				$HTML->{$Ch_select_array[$i]}{ch_wish} = $Ch_sort_array[$i];
-				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
+				$HTML->{$Ch_select_array[$i]}{Ch_sort} = $Ch_sort_array[$i];
+				$HTML->{$Ch_select_array[$i]}{Ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			} else {
-				$HTML->{$Ch_select_array[$i]}{ch_wish} = 999;                          # Reset Default
-				$HTML->{$Ch_select_array[$i]}{ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
+				$HTML->{$Ch_select_array[$i]}{Ch_sort} = 999;                          # Reset Default
+				$HTML->{$Ch_select_array[$i]}{Ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
 		CommandGet($hash, "$name $hash->{helper}{last_cmd}");
@@ -1100,7 +1109,7 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	foreach my $value (qw(Channels_available HTML_data_counter FTUI_data HTML autoload last_cmd programm)) {
+	foreach my $value (qw(Channels_available Ch_commands HTML_data_counter FTUI_data HTML HTML_reload last_cmd programm)) {
 		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
 	return undef;
@@ -1159,7 +1168,7 @@ sub EPG_nonBlock_available_channels($) {
   my $hash = $defs{$name};
   my $return;
 	my $Variant = "unknown";
-	my $ch_id;
+	my $Ch_id;
 	my $ok = "ok";
 	my $additive_info = "";
 	my @Channels_available;
@@ -1171,7 +1180,7 @@ sub EPG_nonBlock_available_channels($) {
 		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
 			my $line_cnt = 0;
 			while (<FileCheck>) {
-				my $ch_name;
+				my $Ch_name;
 				$line_cnt++;
 				if ($line_cnt > 0 && $line_cnt <= 3) {
 					my $line = $_;
@@ -1190,23 +1199,23 @@ sub EPG_nonBlock_available_channels($) {
 				$Variant = "teXXas_RSS" if ($_ =~ /.*<channel><title>teXXas -.*<link>http:\/\/www.texxas.de\/tv\/programm.*/);
 
 				if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
-					$ch_id = $1 if ($_ =~ /<channel id="(.*)">/);        # other
-					$ch_id = $1 if ($_ =~ /\schannel="(.*)"\s?start=/);  # XMLTV.se
+					$Ch_id = $1 if ($_ =~ /<channel id="(.*)">/);        # other
+					$Ch_id = $1 if ($_ =~ /\schannel="(.*)"\s?start=/);  # XMLTV.se
 
 					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
-						Log3 $name, 5, "$name: nonBlocking_available_channels id: $ch_id -> display_name: ".$1;
-						$ch_name = $1;
+						Log3 $name, 5, "$name: nonBlocking_available_channels id: $Ch_id -> display_name: ".$1;
+						$Ch_name = $1;
 					}
 
-					$ch_name = $ch_id if ($Variant eq "XMLTV.se");
-					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant and without ch_id. need help!" if (!$ch_name && $line_cnt == 4);
-					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant" if ($ch_name && $line_cnt == 4);
+					$Ch_name = $Ch_id if ($Variant eq "XMLTV.se");
+					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant and without ch_id. need help!" if (!$Ch_name && $line_cnt == 4);
+					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant" if ($Ch_name && $line_cnt == 4);
 
 					## nonBlocking_available_channels set helper ##
-					if ($ch_name && (not grep /^$ch_name$/, @Channels_available)) {
-						Log3 $name, 5, "$name: nonBlocking_available_channels added $ch_name with ch_id $ch_id";
-						$hash->{helper}{Programm}{$ch_id}{name} = $ch_name;
-						push(@Channels_available,$ch_name);					
+					if ($Ch_name && (not grep /^$Ch_name$/, @Channels_available)) {
+						Log3 $name, 5, "$name: nonBlocking_available_channels added $Ch_name with ch_id $Ch_id";
+						$hash->{helper}{Programm}{$Ch_id} = $Ch_name;
+						push(@Channels_available,$Ch_name);					
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
 					$hash->{helper}{Programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
@@ -1234,7 +1243,7 @@ sub EPG_nonBlock_available_channels($) {
 
 	### for TEST ###
 	# foreach my $ch (sort keys %{$hash->{helper}{Programm}}) {
-		# Log3 $name, 3, $hash->{helper}{Programm}{$ch}{name};
+		# Log3 $name, 3, $hash->{helper}{Programm}{$ch};
 	# }
 
 	my $ch_available = join(";", @Channels_available);
@@ -1290,7 +1299,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 		$ch_table = decode_json($additive_info);
 
 		foreach my $ch (sort keys %{$ch_table}) {
-			Log3 $name, 5, "$name: nonBlock_available_channelsDone channel ".$ch . " -> " . $ch_table->{$ch}->{name};
+			Log3 $name, 5, "$name: nonBlock_available_channelsDone channel ".$ch . " -> " . $ch_table->{$ch};
 		}	
 	}
 
@@ -1341,10 +1350,10 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $EPG_info = "";         # info for user via EPG_readingsSingleUpdate_later
 	my $EPG_cnt = 0;           # counter for founded data
 	my $array_cnt = -1;        # counter to verification data
-	my $ch_found = 0;          # counter to verification ch
-	my $ch_id = "";            # TV channel channel id
-	my $ch_name = "";          # TV channel display-name
-	my $ch_name_before = "";   # TV channel display-name before
+	my $EPG_found = 0;          # counter to verification ch
+	my $Ch_id = "";            # TV channel channel id
+	my $Ch_name = "";          # TV channel display-name
+	my $Ch_name_before = "";   # TV channel display-name before
 	my $desc = "";             # TV desc text
 	my $descend = 0;           # TV desc - ened
 	my $descstart = 0;         # TV desc - start
@@ -1415,9 +1424,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
 			while (<FileCheck>) {
 				if ($_ =~ /<programme start="(.*\s+(.*))" stop="(.*)" channel="(.*)"/) {      # find start | end | channel
-					my $search = $hash->{helper}{Programm}{$4}->{name};
+					my $search = $hash->{helper}{Programm}{$4};
 					#Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | data for channel    -> $search";
-					($start, $hour_diff_read, $end, $ch_id, $ch_name) = ($1, $2, $3, $4, $search);
+					($start, $hour_diff_read, $end, $Ch_id, $Ch_name) = ($1, $2, $3, $4, $search);
 
 					if ($TimeLocaL_GMT_Diff ne $hour_diff_read) {
 						Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | Time must be recalculated! local=$TimeLocaL_GMT_Diff read=$2";
@@ -1458,7 +1467,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 					if ($cmd !~ /loadEPG_Fav/ && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
 						if ($cmd !~ /loadEPG_today/) {
-							$ch_found++ if ($TimeNow gt $start && $TimeNow lt $end);                # Zeitpunktsuche, normal
+							$EPG_found++ if ($TimeNow gt $start && $TimeNow lt $end);                # Zeitpunktsuche, normal
 						} else {
               # Zeitpunktsuche, kompletter Tag
 							if (($start eq $today_start || $start gt $today_start) && ($end eq $today_end || $end lt $today_end) || ($start lt $today_end && ($end gt $today_end || $end eq $today_end))) {
@@ -1466,14 +1475,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | today_start      -> $today_start";
 								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | end              -> $end";
 								# Log3 $name, 3, "$name: nonBlock_loadEPG_v1 | today_end        -> $today_end";
-								$ch_found++;
+								$EPG_found++;
 							}
 						}
 					}
 				}
 
-				### title subtitle desc if ch_found ###
-				if ($cmd !~ /loadEPG_Fav/ && $ch_found != 0) {
+				### title subtitle desc if EPG_found ###
+				if ($cmd !~ /loadEPG_Fav/ && $EPG_found != 0) {
 					$title = $2 if ($_ =~ /<title lang="(.*)">(.*)<\/title>/);                # title
 					$subtitle = $2 if ($_ =~ /<sub-title lang="(.*)">(.*)<\/sub-title>/);     # subtitle
 					
@@ -1515,7 +1524,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					if (scalar(@FavTitle_array) > 0 && ($start gt $TimeNow)) {
 						for (my $i=0;$i<@FavTitle_array;$i++) {
 							if (grep /^\Q$FavTitle_array[$i]\E/, $title) {
-								$ch_found++;
+								$EPG_found++;
 								$FavTitle_found++;
 							}
 						}
@@ -1525,7 +1534,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					if (scalar(@FavDesc_array) > 0 && ($start gt $TimeNow)) {
 						for (my $i=0;$i<@FavDesc_array;$i++) {
 							if (grep /\Q$FavDesc_array[$i]/, $desc) {
-								$ch_found++;
+								$EPG_found++;
 								$FavDesc_found++;
 							}
 						}
@@ -1534,12 +1543,12 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				### END ###
 
 				## FOUND - End of program entry ##
-				if ($_ =~ /<\/programme>/ && $ch_found != 0) {           # find end channel
-					$array_cnt = -1 if ($ch_name_before ne $ch_name);      # Reset bei Kanalwechsel
+				if ($_ =~ /<\/programme>/ && $EPG_found != 0) {           # find end channel
+					$array_cnt = -1 if ($Ch_name_before ne $Ch_name);      # Reset bei Kanalwechsel
 					$array_cnt++;
 					Log3 $name, 4, "#################################################";
-					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name          -> $ch_name";
-					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_before        -> $ch_name_before";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_name          -> $Ch_name";
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | ch_before        -> $Ch_name_before";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | EPG information  -> $array_cnt (value of array)";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | FavDesc          -> $FavDesc_found";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | FavTitle         -> $FavTitle_found";
@@ -1555,42 +1564,42 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | subtitle         -> $subtitle";
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | desc             -> $desc.\n";
 
-					$hash->{helper}{HTML}{$ch_name}{ch_name} = $ch_name;
-					$hash->{helper}{HTML}{$ch_name}{ch_id} = $ch_id;
+					$hash->{helper}{HTML}{$Ch_name}{Ch_name} = $Ch_name;
+					$hash->{helper}{HTML}{$Ch_name}{Ch_id} = $Ch_id;
 
-					if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
+					if ($Ch_select && $Ch_sort && (grep /$Ch_name/, $Ch_select)) {
 						foreach my $i (0 .. $#Ch_select_array) {
-							if ($Ch_select_array[$i] eq $ch_name) {
+							if ($Ch_select_array[$i] eq $Ch_name) {
 								my $value_new = 999;
 								$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
-								$hash->{helper}{HTML}{$Ch_select_array[$i]}{ch_wish} = $value_new;
+								$hash->{helper}{HTML}{$Ch_select_array[$i]}{Ch_sort} = $value_new;
 								Log3 $name, 4, "$name: nonBlock_loadEPG_v1 old numbre of ".$Ch_select_array[$i]." set to ".$value_new;
 							}
 						}
 					} else {
-						$hash->{helper}{HTML}{$ch_name}{ch_wish} = 999;
+						$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = 999;
 					}
 
 					my $mod_cnt;
 					($title, $subtitle, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v1($hash, $title, $subtitle, $desc);
 
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt]{start} = $start;
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt]{end} = $end;
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt]{title} = $title;
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt]{subtitle} = $subtitle;
-					$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt]{desc} = $desc;
+					$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt]{start} = $start;
+					$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt]{end} = $end;
+					$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt]{title} = $title;
+					$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt]{subtitle} = $subtitle;
+					$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt]{desc} = $desc;
 
 					### if modify JSON ###
-					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 Dumper: ".Dumper\$hash->{helper}{HTML}{$ch_name}{EPG}[$array_cnt] if ($mod_cnt != 0);
+					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 Dumper: ".Dumper\$hash->{helper}{HTML}{$Ch_name}{EPG}[$array_cnt] if ($mod_cnt != 0);
 
 					$EPG_cnt++;
-					$ch_found = 0;
-					$ch_name_before = $ch_name;
+					$EPG_found = 0;
+					$Ch_name_before = $Ch_name;
 				}
 
 				## NOTHING FOUND - End of program entry - AND RESET values ##
 				if ($_ =~ /<\/programme>/) {
-					$ch_name = "";
+					$Ch_name = "";
 					$desc = "";
 					$descend = 0;
 					$descstart = 0;
@@ -1691,18 +1700,27 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 		}
 	}
 
+	## Ch_commands check and set to helper ##
+	if ($Ch_commands) {
+		my $av = eval $Ch_commands;
+		if( $@ ) {
+			Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done - Ch_Command, ERROR: ". $@;
+			delete $hash->{helper}{Ch_commands} if(defined($hash->{helper}{Ch_commands}));
+		} else {
+			$Ch_commands = $av if( ref($av) eq "HASH" );
+			$hash->{helper}{Ch_commands} = $Ch_commands;
+		}
+	}
+
 	## JSON data ##
 	my @mychannels = ();
-
 	foreach my $ch (keys %{$HTML}) {
 		## check Ch_Command for channel
-		if ($Ch_commands) {
-			if (grep /$ch/, $Ch_commands) {
-				foreach my $d (keys %{$hash->{helper}{Ch_commands}}) {
-					if (exists $HTML->{$ch} && $d eq $ch) {
-						$HTML->{$d}{ch_command} = $hash->{helper}{Ch_commands}{$d};
-						Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done, JSON added Ch_Command for $d => " . $hash->{helper}{Ch_commands}{$d};
-					}
+		if ($hash->{helper}{Ch_commands} && grep { $_ eq "$ch" } %{$hash->{helper}{Ch_commands}}) {
+			foreach my $d (keys %{$hash->{helper}{Ch_commands}}) {
+				if (exists $HTML->{$ch} && $d eq $ch) {
+					$HTML->{$d}{Ch_command} = $hash->{helper}{Ch_commands}{$d};
+					Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done, Ch_Command found, $d => " . $hash->{helper}{Ch_commands}{$d};
 				}
 			}
 		}
@@ -1749,8 +1767,8 @@ sub EPG_nonBlock_loadEPG_v2($) {
 		my $remove = shift @RRS;
 
 		for (@RRS) {
-			my $ch_found = 0;
-			my $ch_name;
+			my $EPG_found = 0;
+			my $Ch_name;
 			my $desc = "";
 			my $end;
 			my $start;
@@ -1765,38 +1783,38 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				if ( ($Ch_select) && (grep /$search($|,)/, $Ch_select) ) {
 					#Log3 $name, 3, "$name: $cmd $_";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v2             -> $1 found";
-					$ch_name = $1;
-					$ch_found++;
+					$Ch_name = $1;
+					$EPG_found++;
 					$array_cnt++;
 				} else {
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v2             -> not $1 found";
 				}
 			}
 
-			if($_ =~ /:\s(.*)<\/title>/ && $ch_found != 0) {
-				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 channel     -> ".$ch_name;
+			if($_ =~ /:\s(.*)<\/title>/ && $EPG_found != 0) {
+				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 channel     -> ".$Ch_name;
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 title       -> ".$1 ;
 
-				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{title} = $1;
+				$hash->{helper}{HTML}{$Ch_name}{EPG}[0]{title} = $1;
 
 				### need check
-				if ($Ch_select && $Ch_sort && (grep /$ch_name/, $Ch_select)) {
+				if ($Ch_select && $Ch_sort && (grep /$Ch_name/, $Ch_select)) {
 					foreach my $i (0 .. $#Ch_select_array) {
-						if ($Ch_select_array[$i] eq $ch_name) {
+						if ($Ch_select_array[$i] eq $Ch_name) {
 							my $value_new = 999;
 							$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
-							$hash->{helper}{HTML}{$Ch_select_array[$i]}{ch_wish} = $value_new;
+							$hash->{helper}{HTML}{$Ch_select_array[$i]}{Ch_sort} = $value_new;
 							Log3 $name, 4, "$name: nonBlock_loadEPG_v2 ch numbre   -> set to ".$value_new;
 						}
 					}
 				} else {
-					$hash->{helper}{HTML}{$ch_name}{ch_wish} = 999;
+					$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = 999;
 				}
 				### need check attribut
-				$hash->{helper}{HTML}{$ch_name}{ch_name} = $ch_name;
+				$hash->{helper}{HTML}{$Ch_name}{Ch_name} = $Ch_name;
 			}
 
-			if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?((.*)((\n.*)?)+)]]/ && $ch_found != 0) {
+			if($_ =~ /<!\[CDATA\[(.*)?((.*)?\d{2}\.\d{2}\.\d{4}\s(\d{2}:\d{2})\s+-\s+(\d{2}:\d{2}))(<br>)?((.*)((\n.*)?)+)]]/ && $EPG_found != 0) {
 				Log3 $name, 4, "$name: nonBlock_loadEPG_v2 time        -> ".$2;    	 # 17.01.2020 20:15 - 21:15
 
 				($start,$end) = EPG_StartEnd_toISO_v2($2,$2);
@@ -1813,9 +1831,9 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				#my $mod_cnt;
 				#($title, $desc, $mod_cnt) = EPG_SyntaxCheck_for_JSON_v2($hash, $title, $desc);
 
-				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{start} = $start;
-				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{end} = $end;
-				$hash->{helper}{HTML}{$ch_name}{EPG}[0]{desc} = $desc;
+				$hash->{helper}{HTML}{$Ch_name}{EPG}[0]{start} = $start;
+				$hash->{helper}{HTML}{$Ch_name}{EPG}[0]{end} = $end;
+				$hash->{helper}{HTML}{$Ch_name}{EPG}[0]{desc} = $desc;
 			}
 		}
 		$EPG_info = $EPG_tt->{"loadEPG_msg1"} if ($array_cnt != -1);
