@@ -15,7 +15,9 @@
 #################################################################
 # Note´s
 # - test option teXXas with this standings
-# - update "Probably associated with" if Ch_Command set
+# - refresh browser window, any browser no refreh
+#   - YES - Mozilla Firefox 72.0.2
+#   - NO  - Microsoft Edge 
 #################################################################
 
 package main;
@@ -293,6 +295,7 @@ sub EPG_Set($$$@) {
 sub EPG_Get($$$@) {
 	my ( $hash, $name, $cmd, @a ) = @_;
 	my $cmd2 = defined $a[0] ? $a[0] : "";
+	my $room = AttrVal($name, "room", "");
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
@@ -329,8 +332,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "loadFile") {
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
-
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 		EPG_PerformHttpRequest($hash);
 		return undef;
 	}
@@ -340,7 +342,7 @@ sub EPG_Get($$$@) {
 		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
 
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		delete $hash->{helper}{Channels_available};
 
@@ -456,7 +458,7 @@ sub EPG_Attr() {
 		}
 
 		if ($attrName eq "FavDesc" || $attrName eq "FavTitle") {
-			FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+			FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:WEB", "location.reload('true')", "");
 		}
 
 		if ($attrName eq "Ch_commands") {
@@ -493,7 +495,7 @@ sub EPG_Attr() {
 
 	if ($cmd eq "del") {
 		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
-		FW_directNotify("FILTER=room=$name", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavDesc" || $attrName eq "FavTitle");
+		FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavDesc" || $attrName eq "FavTitle");
 
 		if ($attrName eq "Ch_commands") {
 			readingsDelete($hash,".associatedWith") if(ReadingsVal($name, ".associatedWith", undef));
@@ -875,6 +877,7 @@ sub EPG_FW_Popup_Channels {
 sub EPG_FW_set_Attr_Channels {
 	my $name = shift;
 	my $hash = $defs{$name};
+	my $room = AttrVal($name, "room", "");
 	my $Ch_select = shift;
 	my @Ch_select_array = split(",",$Ch_select);
 	my $Ch_sort = shift;
@@ -892,7 +895,7 @@ sub EPG_FW_set_Attr_Channels {
 		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 
-		FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");
 	} else {
 		Log3 $name, 4, "$name: FW_set_Attr_Channels new Channels set";
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
@@ -1633,6 +1636,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
+	my $room = AttrVal($name, "room", "");
 
   Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
@@ -1728,7 +1732,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{HTML} = $HTML;
 	$hash->{helper}{last_cmd} = $cmd;
 
-	FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
+	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 
 	my $text = $cmd2 ne "" ? $cmd."__".$last_loaded : $cmd."_".$last_loaded;
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
@@ -1854,6 +1858,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
+	my $room = AttrVal($name, "room", "");
 
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
@@ -1895,7 +1900,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	$hash->{helper}{last_cmd} = $cmd;
 	$hash->{helper}{HTML} = $HTML;
 
-	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
 }
 
