@@ -1,3 +1,6 @@
+2020-02-04 - Update 66_EPG.pm
+
+- revised location.reload FILTER
 2020-01-24 - Update 66_EPG.pm
 
 - fix onlick desc on some FavTitle
