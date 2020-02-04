@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-01-24 17:10:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-02-04 17:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -15,9 +15,12 @@
 #################################################################
 # Note´s
 # - test option teXXas with this standings
+#
 # - refresh browser window, any browser no refreh
 #   - YES - Mozilla Firefox 72.0.2
 #   - NO  - Microsoft Edge 
+# - Attribut EPG_auto_download hat den Wert yes, aber hat keine neue Datei runtergeladen ... loadFile hat dann dafür gesorgt ... keine Ahnung, ob es hier nicht noch eine neue Möglichkeit gibt ...
+# 
 #################################################################
 
 package main;
@@ -271,7 +274,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200124";
+	$hash->{VERSION} = "20200204";
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -1406,7 +1409,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	if ($cmd =~ /loadEPG_today/) {                           # Beginn und Ende von heute bestimmen
 		$today_start = substr($TimeNow,0,8)."000000 $TimeLocaL_GMT_Diff";
 		$today_end = substr($TimeNow,0,8)."235959 $TimeLocaL_GMT_Diff";
-		$last_loaded = substr($today_start,0,8)."__";
+		$last_loaded = substr($today_start,0,8)."_";
 	}
 
 	if ($cmd =~ /loadEPG/ && $cmd2 =~ /^[0-9]*_[0-9]*$/) {   # loadEPG 20191016_200010 +0200 stündlich ab jetzt
