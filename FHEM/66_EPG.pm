@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-02-04 17:10:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-02-10 17:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -30,6 +30,11 @@ use warnings;
 
 use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
+
+use constant {
+	EPG_FW_errmsg_time => 5000,
+	EPG_VERSION        => "20200210_pre_release_expanded",
+};
 
 my %EPG_transtable_EN = ( 
 		## Days ##
@@ -274,7 +279,7 @@ sub EPG_Define($$) {
 		CommandAttr($hash,"$name room $typ") if (!defined AttrVal($name, "room", undef));				# set room, if only undef --> new def
 	}
 
-	$hash->{VERSION} = "20200204";
+	$hash->{VERSION} = EPG_VERSION;
 
 	### default value´s ###
 	readingsBeginUpdate($hash);
@@ -288,6 +293,8 @@ sub EPG_Set($$$@) {
 	my ( $hash, $name, @a ) = @_;
 	my $setList = "";
 	my $cmd = $a[0];
+
+	$hash->{VERSION} = EPG_VERSION if ($hash->{VERSION} && $hash->{VERSION} ne EPG_VERSION);
 
 	return "$name: no set function exists" if ($cmd ne "?");
 	return $setList if ( $a[0] eq "?");
@@ -335,7 +342,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "loadFile") {
-		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 		EPG_PerformHttpRequest($hash);
 		return undef;
 	}
@@ -345,7 +352,7 @@ sub EPG_Get($$$@) {
 		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
 
-		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		delete $hash->{helper}{Channels_available};
 
@@ -371,24 +378,20 @@ sub EPG_Get($$$@) {
 			$getlist.= "loadEPG_now:noArg ";               # now
 			$getlist.= "loadEPG_Prime:noArg ";             # Primetime
 			$getlist.= "loadEPG_today:noArg ";             # today all
+			$getlist.= "loadEPG_time " ;                   # flex time
+		}
 
+		if ($cmd eq "loadEPG_time") {
 			my $TimeNowMod = FmtDateTime(time());
 			$TimeNowMod =~ s/-|:|\s//g;
 
-			# every hour list #
-			my $loadEPG_list = "";
-			for my $d (substr($TimeNowMod,8, 2) +1 .. 23) {
-				$loadEPG_list.= substr($TimeNowMod,0, 8)."_".sprintf("%02s",$d)."00,";
-			}
-
-			if ($loadEPG_list =~ /,$/) {
-				$loadEPG_list = substr($loadEPG_list,0, -1);
-				$getlist.= "loadEPG:".$loadEPG_list." " ;
-			}
+			return "ERROR: your time failed (example: get $name $cmd ".substr($TimeNowMod,0, 8)."_".substr($TimeNowMod,8, 4).")" if ($cmd2 eq "");
+			return "ERROR: your time is not valid (example: get $name $cmd ".substr($TimeNowMod,0, 8)."_".substr($TimeNowMod,8, 4).")" if ($cmd2 !~ /\d{8}_\d{4}/);
 		}
 
+		## loadEPG_Prime | loadEPG_now | loadEPG_time | loadEPG_today ##
 		if ($cmd =~ /^loadEPG/ && $cmd !~ /loadEPG_Fav/) {
-			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , 5000)", "");
+			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 
 			delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 			if ($hash->{helper}{HTML_reload} && $hash->{helper}{HTML_reload} eq "yes") {
@@ -402,6 +405,7 @@ sub EPG_Get($$$@) {
 			return undef;
 		}
 
+		## loadEPG_FavTitle | loadEPG_FavDesc ##
 		if ($cmd =~ /^loadEPG_Fav/) {
 			readingsSingleUpdate($hash, "state", "$cmd ".$EPG_tt->{"get_loadEPG"}, 1);
 			Log3 $name, 4, "$name: get $cmd - looking for $cmd with $Variant";
@@ -1737,7 +1741,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 
 	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 
-	my $text = $cmd2 ne "" ? $cmd."__".$last_loaded : $cmd."_".$last_loaded;
+	my $text = $cmd2 ne "" ? $cmd."_".$last_loaded : $cmd."_".$last_loaded;
 	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
 }
 
@@ -2184,6 +2188,8 @@ The specifications for the attribute Variant | DownloadFile and DownloadURL are 
 		<li>loadEPG_FavTitle: Loads the EPG data of the defined title of the attribute <code>FavTitle</code></li><a name=""></a>
 		<a name="loadEPG_Prime"></a>
 		<li>loadEPG_Prime: let the EPG data of the selected channels be at PrimeTime 20:15</li><a name=""></a>
+		<a name="loadEPG_time"></a>
+		<li>loadEPG_time: let the EPG data of the selected channels be at input time (example: <code> get EPG loadEPG_time 20200210_1745</code>)</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: let the EPG data of the selected channels be from the current day</li><a name=""></a>
 		<a name="loadFile"></a>
@@ -2306,6 +2312,8 @@ Die Angaben f&uuml;r die Attribut Variante | DownloadFile und DownloadURL sind z
 		<li>loadEPG_FavTitle: l&auml;dt die EPG-Daten der definierten Titel des Attributes <code>FavTitle</code></li><a name=""></a>
 		<a name="loadEPG_Prime"></a>
 		<li>loadEPG_Prime: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le von der PrimeTime 20:15Uhr</li><a name=""></a>
+		<a name="loadEPG_time"></a>
+		<li>loadEPG_time: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le zum angegebenen Zeitpunkt (Bsp: <code> get EPG loadEPG_time 20200210_1745</code>)</li><a name=""></a>
 		<a name="loadEPG_today"></a>
 		<li>loadEPG_today: l&auml;dt die EPG-Daten der ausgew&auml;hlten Kan&auml;le vom aktuellen Tag</li><a name=""></a>
 		<a name="loadFile"></a>
