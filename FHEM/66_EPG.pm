@@ -20,7 +20,8 @@
 #   - YES - Mozilla Firefox 72.0.2
 #   - NO  - Microsoft Edge 
 # - Attribut EPG_auto_download hat den Wert yes, aber hat keine neue Datei runtergeladen ... loadFile hat dann dafür gesorgt ... keine Ahnung, ob es hier nicht noch eine neue Möglichkeit gibt ...
-# 
+#
+# - fix time / HTML view if search time in future
 #################################################################
 
 package main;
@@ -32,8 +33,10 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 use constant {
-	EPG_FW_errmsg_time => 5000,
-	EPG_VERSION        => "20200210_pre_release_expanded",
+	EPG_FW_errmsg_time      => 5000,
+	EPG_InternalTimer_DELAY => 2,
+	EPG_Temp_ChSortNumbre   => 999,
+	EPG_VERSION             => "20200210_pre_release_expanded",
 };
 
 my %EPG_transtable_EN = ( 
@@ -228,12 +231,8 @@ sub EPG_Initialize($) {
 												             #$readingFnAttributes;
 
 	## in any attribute redefinition readjust language ##
-	my $lang = AttrVal("global","language","EN");
-  if($lang eq "DE") {
-		$EPG_tt = \%EPG_transtable_DE;
-	} else {
-		$EPG_tt = \%EPG_transtable_EN;
-	}
+	my $lang = uc(AttrVal("global","language","EN"));
+	$EPG_tt = $lang eq "DE" ? \%EPG_transtable_DE : \%EPG_transtable_EN;
 }
 
 #####################
@@ -250,12 +249,8 @@ sub EPG_Define($$) {
 	return "Usage: define <name> $name"  if(@arg != 2);
 
   ## readjust language ##
-  my $lang = AttrVal("global","language","EN");
-  if( $lang eq "DE"){
-    $EPG_tt = \%EPG_transtable_DE;
-  } else {
-    $EPG_tt = \%EPG_transtable_EN;
-  }
+	my $lang = uc(AttrVal("global","language","EN"));
+	$EPG_tt = $lang eq "DE" ? \%EPG_transtable_DE : \%EPG_transtable_EN;
 
 	if ($init_done) {
 		if (!defined(AttrVal($autocreateName, "disable", undef)) && !exists($defs{$filelogName})) {
@@ -442,12 +437,8 @@ sub EPG_Attr() {
 	my $typ = $hash->{TYPE};
 
   ## in any attribute redefinition readjust language ##
-  my $lang = AttrVal("global","language","EN");
-  if( $lang eq "DE"){
-    $EPG_tt = \%EPG_transtable_DE;
-  } else {
-    $EPG_tt = \%EPG_transtable_EN;
-  }
+	my $lang = uc(AttrVal("global","language","EN"));
+	$EPG_tt = $lang eq "DE" ? \%EPG_transtable_DE : \%EPG_transtable_EN;
 
 	if ($cmd eq "set" && $init_done == 1 ) {
 		if ($attrName eq "Ch_Info_to_Reading" && $attrValue eq "no") {
@@ -534,12 +525,8 @@ sub EPG_FW_Detail($@) {
 	@Channels_available = @{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
 
   ## readjust language ##
-  my $lang = AttrVal("global","language","EN");
-  if($lang eq "DE") {
-    $EPG_tt = \%EPG_transtable_DE;
-  } else {
-    $EPG_tt = \%EPG_transtable_EN;
-  }
+	my $lang = uc(AttrVal("global","language","EN"));
+	$EPG_tt = $lang eq "DE" ? \%EPG_transtable_DE : \%EPG_transtable_EN;
 
 	Log3 $name, 5, "$name: FW_Detail is running (Tableview=$Table, language=$lang)";
 	Log3 $name, 5, "$name: FW_Detail - Channels_available: ".scalar(@Channels_available);
@@ -864,7 +851,7 @@ sub EPG_FW_Popup_Channels {
 		if ($Ch_select && index($Ch_select,$Channels_available[$i]) >= 0) {
 			$checked_cnt++;
 			$checked = "checked";
-			if($HTML->{$Channels_available[$i]}{Ch_sort} && $HTML->{$Channels_available[$i]}{Ch_sort} < 999) {
+			if($HTML->{$Channels_available[$i]}{Ch_sort} && $HTML->{$Channels_available[$i]}{Ch_sort} < EPG_Temp_ChSortNumbre) {
 				$Ch_sort = $HTML->{$Channels_available[$i]}{Ch_sort};
 			} else {
 				$Ch_sort = $Ch_sort[$checked_cnt] if ($Ch_sort[$checked_cnt] && $Ch_sort[$checked_cnt] ne 0);
@@ -899,7 +886,7 @@ sub EPG_FW_set_Attr_Channels {
 		Log3 $name, 4, "$name: FW_set_Attr_Channels all Channels delete and clean view";
 		CommandDeleteAttr($hash,"$name Ch_select");
 		CommandDeleteAttr($hash,"$name Ch_sort");
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
+		InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 
 		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");
@@ -920,7 +907,7 @@ sub EPG_FW_set_Attr_Channels {
 				$HTML->{$Ch_select_array[$i]}{Ch_sort} = $Ch_sort_array[$i];
 				$HTML->{$Ch_select_array[$i]}{Ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			} else {
-				$HTML->{$Ch_select_array[$i]}{Ch_sort} = 999;                          # Reset Default
+				$HTML->{$Ch_select_array[$i]}{Ch_sort} = EPG_Temp_ChSortNumbre;        # Reset Default
 				$HTML->{$Ch_select_array[$i]}{Ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
@@ -1320,12 +1307,12 @@ sub EPG_nonBlock_available_channelsDone($) {
 
 	if (AttrVal($name, "Ch_select", undef)) {
 		if ($EPG_auto_update ne "yes") {
-			InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK"});		
+			InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK"});		
 		} else {
 			CommandGet($hash, "$name loadEPG_now") if ($Variant ne "teXXas_RSS");
 		}
 	} else {
-		InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK2"});
+		InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"chDone_msg_OK2"});
 	}
 
 	$hash->{helper}{Channels_available} = \@Channels_available;
@@ -1473,7 +1460,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 
 					if ($cmd !~ /loadEPG_Fav/ && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
 						if ($cmd !~ /loadEPG_today/) {
-							$EPG_found++ if ($TimeNow gt $start && $TimeNow lt $end);                # Zeitpunktsuche, normal
+							$EPG_found++ if ($TimeNow gt $start && $TimeNow lt $end);               # Zeitpunktsuche, normal
 						} else {
               # Zeitpunktsuche, kompletter Tag
 							if (($start eq $today_start || $start gt $today_start) && ($end eq $today_end || $end lt $today_end) || ($start lt $today_end && ($end gt $today_end || $end eq $today_end))) {
@@ -1510,17 +1497,17 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					}
 				}
 
-				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0) { # desc - multiline line
+				if ($_ =~ /<desc lang="(.*)">(.*)/ && $descstart == 0 && $descend == 0) {          # desc - multiline line
 					$desc = $2;
 					$descstart = 1;
 				}
 
-				if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/) {           # desc - multiline line
+				if ($descstart == 1 && $descend == 0 && $_ !~ /<desc lang/ && $_ !~ /<\/desc>/) {  # desc - multiline line
 					chomp ($_);
 					$desc.= " ".$_;
 				}
 
-				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {                             # desc - multiline line end
+				if ($descstart == 1 && $descend == 0 && $_ =~ /(.*)<\/desc>/) {                     # desc - multiline line end
 					$desc.= " ".$1;
 					$descend = 1;
 				};
@@ -1550,7 +1537,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 				### END ###
 
 				## FOUND - End of program entry ##
-				if ($_ =~ /<\/programme>/ && $EPG_found != 0) {           # find end channel
+				if ($_ =~ /<\/programme>/ && $EPG_found != 0) {          # find end channel
 					$array_cnt = -1 if ($Ch_name_before ne $Ch_name);      # Reset bei Kanalwechsel
 					$array_cnt++;
 					Log3 $name, 4, "#################################################";
@@ -1577,14 +1564,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					if ($Ch_select && $Ch_sort && (grep /$Ch_name/, $Ch_select)) {
 						foreach my $i (0 .. $#Ch_select_array) {
 							if ($Ch_select_array[$i] eq $Ch_name) {
-								my $value_new = 999;
+								my $value_new = EPG_Temp_ChSortNumbre;
 								$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
 								$hash->{helper}{HTML}{$Ch_select_array[$i]}{Ch_sort} = $value_new;
 								Log3 $name, 4, "$name: nonBlock_loadEPG_v1 old numbre of ".$Ch_select_array[$i]." set to ".$value_new;
 							}
 						}
 					} else {
-						$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = 999;
+						$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = EPG_Temp_ChSortNumbre;
 					}
 
 					my $mod_cnt;
@@ -1742,7 +1729,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 
 	my $text = $cmd2 ne "" ? $cmd."_".$last_loaded : $cmd."_".$last_loaded;
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
+	InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
 }
 
 #####################
@@ -1809,14 +1796,14 @@ sub EPG_nonBlock_loadEPG_v2($) {
 				if ($Ch_select && $Ch_sort && (grep /$Ch_name/, $Ch_select)) {
 					foreach my $i (0 .. $#Ch_select_array) {
 						if ($Ch_select_array[$i] eq $Ch_name) {
-							my $value_new = 999;
+							my $value_new = EPG_Temp_ChSortNumbre;
 							$value_new = $Ch_sort_array[$i] if ($Ch_sort_array[$i] != 0);
 							$hash->{helper}{HTML}{$Ch_select_array[$i]}{Ch_sort} = $value_new;
 							Log3 $name, 4, "$name: nonBlock_loadEPG_v2 ch numbre   -> set to ".$value_new;
 						}
 					}
 				} else {
-					$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = 999;
+					$hash->{helper}{HTML}{$Ch_name}{Ch_sort} = EPG_Temp_ChSortNumbre;
 				}
 				### need check attribut
 				$hash->{helper}{HTML}{$Ch_name}{Ch_name} = $Ch_name;
@@ -1908,7 +1895,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	$hash->{helper}{HTML} = $HTML;
 
 	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
-	InternalTimer(gettimeofday()+2, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
+	InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
 }
 
 #####################
