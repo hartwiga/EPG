@@ -1,3 +1,4 @@
+2020-02-11 - Merge branch 'pre-release_expanded' of https://github.com/fhem/EPG into pre-release_expanded
 2020-02-11 - Update 66_EPG.pm
 
 - fix time / HTML view if search time in future
