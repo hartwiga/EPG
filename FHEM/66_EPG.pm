@@ -335,7 +335,7 @@ sub EPG_Get($$$@) {
 	}
 
 	if ($cmd eq "loadFile") {
-		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 		EPG_PerformHttpRequest($hash);
 		return undef;
 	}
@@ -345,7 +345,7 @@ sub EPG_Get($$$@) {
 		EPG_File_check($hash);
 		return "ERROR: no EPG_file found! Please use \"get $name loadFile\" and try again." if (not ReadingsVal($name, "EPG_file_name", undef));
 
-		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 		Log3 $name, 4, "$name: get $cmd - starting blocking call";
 		delete $hash->{helper}{Channels_available};
 
@@ -384,7 +384,7 @@ sub EPG_Get($$$@) {
 
 		## loadEPG_Prime | loadEPG_now | loadEPG_time | loadEPG_today ##
 		if ($cmd =~ /^loadEPG/ && $cmd !~ /loadEPG_Fav/) {
-			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:WEB", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
+			FW_directNotify("FILTER=(room=)?$name", "#FHEMWEB:$FW_wname", "FW_errmsg('$name: ".$EPG_tt->{"Notify_auto_msg"}." $cmd' , ".EPG_FW_errmsg_time.")", "");
 
 			delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 			if ($hash->{helper}{HTML_reload} && $hash->{helper}{HTML_reload} eq "yes") {
@@ -454,7 +454,7 @@ sub EPG_Attr() {
 		}
 
 		if ($attrName eq "FavDesc" || $attrName eq "FavTitle") {
-			FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:WEB", "location.reload('true')", "");
+			FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:$FW_wname", "location.reload('true')", "");
 		}
 
 		if ($attrName eq "Ch_commands") {
@@ -491,7 +491,7 @@ sub EPG_Attr() {
 
 	if ($cmd eq "del") {
 		EPG_readingsDeleteChannel($hash) if ($attrName eq "Ch_Info_to_Reading");
-		FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:WEB", "location.reload('true')", "") if ($attrName eq "FavDesc" || $attrName eq "FavTitle");
+		FW_directNotify("FILTER=room=$FW_room", "#FHEMWEB:$FW_wname", "location.reload('true')", "") if ($attrName eq "FavDesc" || $attrName eq "FavTitle");
 
 		if ($attrName eq "Ch_commands") {
 			readingsDelete($hash,".associatedWith") if(ReadingsVal($name, ".associatedWith", undef));
@@ -883,7 +883,7 @@ sub EPG_FW_set_Attr_Channels {
 		InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,".$EPG_tt->{"set_Attr_Ch_eq"});
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 
-		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");
+		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "location.reload('true')", "");
 	} else {
 		Log3 $name, 4, "$name: FW_set_Attr_Channels new Channels set";
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
@@ -989,7 +989,7 @@ sub EPG_ParseHttpResponse($$$) {
 		}
 
 		EPG_File_check($hash) if ($osname ne "MSWin32");
-		FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");
+		FW_directNotify("FILTER=$name", "#FHEMWEB:$FW_wname", "location.reload('true')", "");
 		$state = 	$EPG_tt->{"ParseHttp_state_ok"};
 		$HttpResponse = $EPG_tt->{"ParseHttp_Http_ok"};
 	}
@@ -1297,7 +1297,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 
 	$hash->{helper}{Programm} = $ch_table;
 	CommandAttr($hash,"$name Variant $Variant") if ($Variant ne "unknown");
-	FW_directNotify("FILTER=$name", "#FHEMWEB:WEB", "location.reload('true')", "");		            # reload Webseite
+	FW_directNotify("FILTER=$name", "#FHEMWEB:$FW_wname", "location.reload('true')", "");		            # reload Webseite
 
 	if (AttrVal($name, "Ch_select", undef)) {
 		if ($EPG_auto_update ne "yes") {
@@ -1713,7 +1713,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{last_cmd} = $cmd;
 	$hash->{helper}{last_loaded} = $last_loaded;
 
-	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
+	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "location.reload('true')", "");		# reload Webseite
 
 	my $text = $cmd2 ne "" ? $cmd."_".$last_loaded : $cmd."_".$last_loaded;
 	InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$text");
@@ -1881,7 +1881,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	$hash->{helper}{last_cmd} = $cmd;
 	$hash->{helper}{HTML} = $HTML;
 
-	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
+	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "location.reload('true')", "");		# reload Webseite
 	InternalTimer(gettimeofday()+EPG_InternalTimer_DELAY, "EPG_readingsSingleUpdate_later", "$name,$EPG_info,$cmd");
 }
 
