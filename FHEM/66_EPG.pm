@@ -29,6 +29,7 @@ use warnings;
 
 use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
+use Time::Local;
 
 use constant {
 	EPG_FW_errmsg_time      => 5000, # milliseconds
