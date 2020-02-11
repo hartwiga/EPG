@@ -29,7 +29,6 @@ use warnings;
 
 use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
-use Time::Local;
 
 use constant {
 	EPG_FW_errmsg_time      => 5000, # milliseconds
@@ -739,9 +738,7 @@ sub EPG_FW_Detail($@) {
 			## HTML view normal ##
 			if ($hash->{helper}{last_cmd} !~ /^loadEPG_Fav/) {
 				## time now - normal
-				my $t = timelocal(0, 0, 0, substr($hash->{helper}{last_loaded},6,2), substr($hash->{helper}{last_loaded},4,2) * 1 - 1, substr($hash->{helper}{last_loaded},0,4));
-				my ($mday,$mon,$wday) = ( (localtime $t)[3] , (localtime $t)[4] , (localtime $t)[6] );
-
+				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime(fhemTimeGm(0, 0, 0, substr($hash->{helper}{last_loaded},6,2) * 1, ( substr($hash->{helper}{last_loaded},4,2) * 1 - 1 ), ( substr($hash->{helper}{last_loaded},0,4) * 1 - 1900 ) ));
 				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".substr($hash->{helper}{last_loaded},0,4);
 				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			## HTML view for FavoriteShow ##
