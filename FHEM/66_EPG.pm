@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-02-10 17:10:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-02-11 17:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -20,8 +20,6 @@
 #   - YES - Mozilla Firefox 72.0.2
 #   - NO  - Microsoft Edge 
 # - Attribut EPG_auto_download hat den Wert yes, aber hat keine neue Datei runtergeladen ... loadFile hat dann dafür gesorgt ... keine Ahnung, ob es hier nicht noch eine neue Möglichkeit gibt ...
-#
-# - fix time / HTML view if search time in future
 #################################################################
 
 package main;
@@ -33,10 +31,10 @@ use HttpUtils;					# https://wiki.fhem.de/wiki/HttpUtils
 use Data::Dumper;
 
 use constant {
-	EPG_FW_errmsg_time      => 5000,
-	EPG_InternalTimer_DELAY => 2,
+	EPG_FW_errmsg_time      => 5000, # milliseconds
+	EPG_InternalTimer_DELAY => 2,    # seconds
 	EPG_Temp_ChSortNumbre   => 999,
-	EPG_VERSION             => "20200210_pre_release_expanded",
+	EPG_VERSION             => "20200211_pre_release_expanded",
 };
 
 my %EPG_transtable_EN = ( 
@@ -592,8 +590,8 @@ sub EPG_FW_Detail($@) {
 		if ($FW_detail) {
 			### Control panel ###
 			$html_site .= "<div class='makeTable wide'><span>".$EPG_tt->{"control_pan"}."</span>
-							<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}'>
-							<tr class='even'>";
+										<table class='block wide' id='EPG_InfoMenue' nm='$hash->{NAME}'>
+										<tr class='even'>";
 
 			$html_site .= "<td><a href='#button1' id='button1'>".$EPG_tt->{"control_pan_btn"}."</a></td>";
 			$html_site .= "<td>".$EPG_tt->{"read_ch"}.": ". scalar(@Channels_available) ."</td>";
@@ -740,14 +738,10 @@ sub EPG_FW_Detail($@) {
 			## HTML view normal ##
 			if ($hash->{helper}{last_cmd} !~ /^loadEPG_Fav/) {
 				## time now - normal
-				my ($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime();
+				my $t = timelocal(0, 0, 0, substr($hash->{helper}{last_loaded},6,2), substr($hash->{helper}{last_loaded},4,2) * 1 - 1, substr($hash->{helper}{last_loaded},0,4));
+				my ($mday,$mon,$wday) = ( (localtime $t)[3] , (localtime $t)[4] , (localtime $t)[6] );
 
-				## time recalculation tomorrow - if now 11:30pm and view loadEPG_Prime
-				if ($hash->{helper}{last_cmd} eq "loadEPG_Prime" && $hour >= 20 && $min > 15) {
-					($sec,$min,$hour,$mday,$mon,$year,$wday,$ydat,$isdst) = localtime(time() + 14440);
-				}
-
-				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".($year + 1900);
+				$date = $EPG_tt->{"day".$wday}.", ".sprintf("%02s",$mday)." ".$EPG_tt->{"months".($mon + 1)}." ".substr($hash->{helper}{last_loaded},0,4);
 				$html_site .= "<tr class=\"even\"><th>".$EPG_tt->{"channel"}."</th><th>".$EPG_tt->{"start"}."</th><th>".$EPG_tt->{"end"}."</th><th>".$EPG_tt->{"broadcast"}."<small> (".$date.")</small></th>".$Table_view_Subtitle."</tr>";
 			## HTML view for FavoriteShow ##
 			} else {
@@ -1105,7 +1099,7 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	foreach my $value (qw(Channels_available Ch_commands HTML_data_counter FTUI_data HTML HTML_reload last_cmd programm)) {
+	foreach my $value (qw(Channels_available Ch_commands HTML_data_counter FTUI_data HTML HTML_reload last_cmd last_loaded programm)) {
 		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
 	return undef;
@@ -1385,15 +1379,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	}
 	
 	if ($cmd =~ /loadEPG_Prime/) {
-		if (substr($TimeNow,8, 2) > 20) {                      # loadEPG_Prime 20191016201510 +0200	morgen wenn Prime derzeit läuft
-			my @time = split(/-|\s|:/,FmtDateTime(time()));
-			$TimeNow = FmtDateTime(time() - ($time[5] + $time[4] * 60 + $time[3] * 3600) + 86400);
-			$TimeNow =~ s/-|:|\s//g;
-			$TimeNow.= " +0200";
-			substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
-		} else {                                               # loadEPG_Prime 20191016201510 +0200	heute
-			substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";
-		}
+		substr($TimeNow, 8) = "201510 $TimeLocaL_GMT_Diff";    # loadEPG_Prime 20191016201510 +0200	heute
 		$last_loaded = substr($TimeNow,0,8)."_2015";
 	}
 	
@@ -1725,6 +1711,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{FTUI_data} = \@mychannels;
 	$hash->{helper}{HTML} = $HTML;
 	$hash->{helper}{last_cmd} = $cmd;
+	$hash->{helper}{last_loaded} = $last_loaded;
 
 	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:WEB", "location.reload('true')", "");		# reload Webseite
 
