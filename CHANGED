@@ -1,3 +1,7 @@
+2020-02-11 - Update 66_EPG.pm
+
+- fix time / HTML view if search time in future
+- loadEPG_Prime view always 2015 at day, not more with jump to next day
 2020-02-10 - Update 66_EPG.pm
 
 - fix automatic language for old FHEM versions
