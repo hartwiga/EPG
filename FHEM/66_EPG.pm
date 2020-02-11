@@ -302,10 +302,12 @@ sub EPG_Get($$$@) {
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
 	my @Channels_available;
 	@Channels_available = \@{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
 
-	my $getlist = "loadFile:noArg jsonEPG:noArg ";
+	my $getlist = "loadFile:noArg ";
+	$getlist.= "jsonEPG:noArg " if (scalar(@Channels_available) > 0);
 	$getlist.= "available_channels:noArg " if (ReadingsVal($name, "HttpResponse", undef) && 
 	                                           ReadingsVal($name, "HttpResponse", undef) eq $EPG_tt->{"ParseHttp_Http_ok"} &&
                                              ReadingsVal($name, "EPG_file_name", undef) ne $EPG_tt->{"File_check_DownFile"});
@@ -326,11 +328,8 @@ sub EPG_Get($$$@) {
 		## check directory and create ##
 		if (! -d "./FHEM/EPG") {
 			my $ok = mkdir("FHEM/EPG");
-			if ($ok == 1) {
-				Log3 $name, 4, "$name: Get - directory automatic created ($!)"; 
-			} else {
-				Log3 $name, 4, "$name: Get - directory check - ERROR $ok";
-			}
+			my $text = $ok == 1 ? "directory automatic created ($!)" : "directory check - ERROR $ok";
+			Log3 $name, 4, "$name: Get - ".$text;
 		}
 	}
 
@@ -433,7 +432,8 @@ sub EPG_Attr() {
 	my ($cmd, $name, $attrName, $attrValue) = @_;
 	my $hash = $defs{$name};
 	my $typ = $hash->{TYPE};
-
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	
   ## in any attribute redefinition readjust language ##
 	my $lang = uc(AttrVal("global","language","EN"));
 	$EPG_tt = $lang eq "DE" ? \%EPG_transtable_DE : \%EPG_transtable_EN;
@@ -950,6 +950,7 @@ sub EPG_ParseHttpResponse($$$) {
 	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
 	my $state = $EPG_tt->{"ParseHttp_state1"};
 	my $FileAge = undef;
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
 
 	Log3 $name, 5, "$name: ParseHttpResponse - error: $err";
 	Log3 $name, 5, "$name: ParseHttpResponse - http code: ".$http_param->{code};
@@ -1231,11 +1232,6 @@ sub EPG_nonBlock_available_channels($) {
 		Log3 $name, 4, "$name: nonBlocking_available_channels file $EPG_file_name not found, need help!";
 	}
 
-	### for TEST ###
-	# foreach my $ch (sort keys %{$hash->{helper}{Programm}}) {
-		# Log3 $name, 3, $hash->{helper}{Programm}{$ch};
-	# }
-
 	my $ch_available = join(";", @Channels_available);
 	$return = $name."|".$EPG_file_name."|".$ok."|".$Variant."|".$ch_available."|".$additive_info;
 
@@ -1251,7 +1247,8 @@ sub EPG_nonBlock_available_channelsDone($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
-	
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+
 	return unless(defined($string));
   Log3 $name, 4, "$name: nonBlock_available_channelsDone running";
   Log3 $name, 5, "$name: nonBlock_available_channelsDone string=$string";
@@ -1617,6 +1614,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my $room = AttrVal($name, "room", "");
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
 
   Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
@@ -1840,6 +1838,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my $room = AttrVal($name, "room", "");
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
 
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
