@@ -1,3 +1,8 @@
+2020-02-16 - Update 66_EPG.pm
+
+- revised function EPG_Time_toISO_v1
+- fix automatic_loadFile if found 0 broadcast information
+- added reading EPG_file_last_timestamp with last timestamp from EPG_file
 2020-02-12 - Merge branch 'pre-release_expanded' of https://github.com/fhem/EPG into pre-release_expanded
 2020-02-11 - Merge branch 'pre-release_expanded' of https://github.com/fhem/EPG into pre-release_expanded
 2020-02-11 - Merge branch 'pre-release_expanded' of https://github.com/fhem/EPG into pre-release_expanded
