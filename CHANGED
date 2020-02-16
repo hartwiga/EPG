@@ -1,5 +1,8 @@
 2020-02-16 - Update 66_EPG.pm
 
+- fix some handlings & PEARL Warnings
+2020-02-16 - Update 66_EPG.pm
+
 - revised function EPG_Time_toISO_v1
 - fix automatic_loadFile if found 0 broadcast information
 - added reading EPG_file_last_timestamp with last timestamp from EPG_file
