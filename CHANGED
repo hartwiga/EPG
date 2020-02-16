@@ -1,5 +1,11 @@
 2020-02-16 - Update 66_EPG.pm
 
+- revised logoutput
+- fix variant
+- added safety loop for automatic download
+- addedsub EPG_Reset_HELPER
+2020-02-16 - Update 66_EPG.pm
+
 - fix some handlings & PEARL Warnings
 2020-02-16 - Update 66_EPG.pm
 
