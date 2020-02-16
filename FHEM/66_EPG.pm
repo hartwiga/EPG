@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-02-11 17:10:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-02-16 18:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -34,7 +34,7 @@ use constant {
 	EPG_FW_errmsg_time      => 5000, # milliseconds
 	EPG_InternalTimer_DELAY => 2,    # seconds
 	EPG_Temp_ChSortNumbre   => 999,
-	EPG_VERSION             => "20200211_pre_release_expanded",
+	EPG_VERSION             => "20200216_pre_release_expanded",
 };
 
 my %EPG_transtable_EN = ( 
@@ -948,6 +948,7 @@ sub EPG_ParseHttpResponse($$$) {
 	my $HTTP_TimeOut = AttrVal($name, "HTTP_TimeOut", 10);
 	my $state = $EPG_tt->{"ParseHttp_state1"};
 	my $FileAge = undef;
+	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
 	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
 
 	Log3 $name, 5, "$name: ParseHttpResponse - error: $err";
@@ -999,6 +1000,9 @@ sub EPG_ParseHttpResponse($$$) {
 	readingsEndUpdate($hash, 1);
 
 	HttpUtils_Close($http_param);
+
+	# loadEPG_now if cmd automatic_loadFile after "found 0 broadcast information, process automatic download started"
+	CommandGet($hash, "$name loadEPG_now") if ($EPG_auto_download eq "yes" && $hash->{helper}{last_cmd} eq "automatic_loadFile");
 }
 
 #####################
@@ -1098,7 +1102,7 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	foreach my $value (qw(Channels_available Ch_commands HTML_data_counter FTUI_data HTML HTML_reload last_cmd last_loaded programm)) {
+	foreach my $value (qw(Channels_available Ch_commands EPG_file_last_timestamp FTUI_data HTML HTML_data_counter HTML_reload last_cmd last_loaded programm)) {
 		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
 	return undef;
@@ -1350,6 +1354,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	my $title = "";            # TV title
 	my $today_end = "";        # today time end
 	my $today_start = "";      # today time start
+	my $EPG_file_last_timestamp = "";  # last timestamp on file
 
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my @Ch_sort_array = split(",",$Ch_sort) if ($Ch_sort);
@@ -1394,7 +1399,7 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	if ($cmd =~ /^loadEPG_Fav/) {
 		$last_loaded = "_";
 	}
-	
+
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | TimeNow          -> $TimeNow";
 
 	if (-e "./FHEM/EPG/$EPG_file_name") {
@@ -1438,6 +1443,9 @@ sub EPG_nonBlock_loadEPG_v1($) {
 						# Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start new        -> $start";
 						# Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end new          -> $end";
 					}
+
+					## save last timestamp from EPG_file ##
+					$EPG_file_last_timestamp = $end ne "" && $EPG_file_last_timestamp lt $end ? $end : $EPG_file_last_timestamp;
 
 					if ($cmd !~ /loadEPG_Fav/ && grep /$search($|,)/, $Ch_select) {             # find in attributes channel
 						if ($cmd !~ /loadEPG_today/) {
@@ -1531,7 +1539,8 @@ sub EPG_nonBlock_loadEPG_v1($) {
 					Log3 $name, 5, "$name: nonBlock_loadEPG_v1 | end (indern)     -> $end";
 
 					## time format better for JSON and format once intern
-					($start,$end) = EPG_StartEnd_toISO_v1($start,$end);
+					($start) = EPG_Time_toISO_v1($start);
+					($end) = EPG_Time_toISO_v1($end);
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | start            -> $start";
 					Log3 $name, 4, "$name: nonBlock_loadEPG_v1 | end              -> $end";
 
@@ -1597,14 +1606,14 @@ sub EPG_nonBlock_loadEPG_v1($) {
 	$json_HTML = "" if ($array_cnt == -1);
 	Log3 $name, 5, "$name: nonBlock_loadEPG_v1 value JSON for delivery: $json_HTML";
 
-	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$cmd2."|".$json_HTML."|".$last_loaded."|".$EPG_cnt;
+	$return = $name."|".$EPG_file_name."|".$EPG_info."|".$cmd."|".$cmd2."|".$json_HTML."|".$last_loaded."|".$EPG_cnt."|".$EPG_file_last_timestamp;
 	return $return;
 }
 
 #####################
 sub EPG_nonBlock_loadEPG_v1Done($) {
 	my ($string) = @_;
-	my ($name, $EPG_file_name, $EPG_info, $cmd, $cmd2, $json_HTML, $last_loaded, $EPG_cnt) = split("\\|", $string);
+	my ($name, $EPG_file_name, $EPG_info, $cmd, $cmd2, $json_HTML, $last_loaded, $EPG_cnt, $EPG_file_last_timestamp) = split("\\|", $string);
   my $hash = $defs{$name};
 	my $Ch_commands = AttrVal($name,"Ch_commands", undef);
 	my $Ch_Info_to_Reading = AttrVal($name, "Ch_Info_to_Reading", "no");
@@ -1626,6 +1635,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done found $EPG_cnt broadcast information";
 	if ($EPG_cnt == 0 && $EPG_auto_download eq "yes") {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done found 0 broadcast information, process automatic download started";
+		$hash->{helper}{last_cmd} = "automatic_loadFile";
 		CommandGet($hash, "$name loadFile");
 		return undef;
 	}
@@ -1708,6 +1718,12 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	$hash->{helper}{HTML} = $HTML;
 	$hash->{helper}{last_cmd} = $cmd;
 	$hash->{helper}{last_loaded} = $last_loaded;
+	
+	if ($EPG_file_last_timestamp ne "") {
+		## change to FHEM format
+		($EPG_file_last_timestamp) = EPG_Time_toISO_v1($EPG_file_last_timestamp);
+		$hash->{helper}{EPG_file_last_timestamp} = $EPG_file_last_timestamp;
+	}
 
 	FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "location.reload('true')", "");		# reload Webseite
 
@@ -1902,6 +1918,7 @@ sub EPG_readingsSingleUpdate_later {
 
 	readingsBeginUpdate($hash);
 	readingsBulkUpdate($hash, "state", $parameter[1]) if ($parameter[1]);
+	readingsBulkUpdate($hash, "EPG_file_last_timestamp", $hash->{helper}{EPG_file_last_timestamp}) if ($hash->{helper}{EPG_file_last_timestamp});
 	readingsBulkUpdate($hash, "EPG_last_loaded", $parameter[2]) if ($parameter[2]);
 	readingsEndUpdate($hash, 1);
 }
@@ -2057,12 +2074,11 @@ sub EPG_SyntaxCheck_for_JSON_v2($$$) {
 ##################### ( valid Format´s for Date.parse() )
 # 20200116101500 +0100 to 2020-01-16T10:15:00
 # 20200116101500 +0100 to 2020-01-16 10:15:00
-sub EPG_StartEnd_toISO_v1($$) {
-	my($start, $end) = @_;
+sub EPG_Time_toISO_v1($) {
+	my($time) = @_;
 
-	$start = substr($start,0,4)."-".substr($start,4,2)."-".substr($start,6,2)." ".substr($start,8,2).":".substr($start,10,2).":".substr($start,12,2);
-	$end = substr($end,0,4)."-".substr($end,4,2)."-".substr($end,6,2)." ".substr($end,8,2).":".substr($end,10,2).":".substr($end,12,2);
-	return ($start, $end);
+	$time = substr($time,0,4)."-".substr($time,4,2)."-".substr($time,6,2)." ".substr($time,8,2).":".substr($time,10,2).":".substr($time,12,2);	
+	return ($time);
 }
 
 ##################### ( valid Format´s for Date.parse() )
