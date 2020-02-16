@@ -111,6 +111,7 @@ my %EPG_transtable_EN = (
 		"chDone_msg_OK2"      =>  "available_channels loaded, Please select channel on Control panel",
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json failed, use verbose 5 to view more",
+		"loadEPG_v1Done_STOP" =>  "automatic download STOP, no current data. Please check your source!",
 		## EPG_nonBlock_loadEPG ##
 		"loadEPG_msg1"        =>  "all EPG channel information processed",
 		"loadEPG_msg2"        =>  "no EPG channel information available",
@@ -193,6 +194,7 @@ my %EPG_transtable_EN = (
 		"chDone_msg_OK2"      =>  "verfügbare Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json fehlgeschlagen, bitte benutze verbose 5 um mehr zu erkennen",
+		"loadEPG_v1Done_STOP" =>  "automatischer Download STOP, keine aktuellen Daten. Bitte überprüfen Sie Ihre Quelle!",
 		## EPG_nonBlock_loadEPG ##
 		"loadEPG_msg1"        =>  "alle EPG Daten verarbeitet",
 		"loadEPG_msg2"        =>  "keine EPG Daten verfügbar",
@@ -456,6 +458,12 @@ sub EPG_Attr() {
 		}
 
 		if ($attrName eq "DownloadFile" && $attrValue ne AttrVal($name, "DownloadFile", undef)) {
+			readingsDelete($hash,"EPG_file_last_timestamp") if(ReadingsVal($name, "EPG_file_last_timestamp", undef));
+			readingsDelete($hash,"EPG_last_loaded") if(ReadingsVal($name, "EPG_last_loaded", undef));
+
+			delete $attr{$name}{Ch_sort} if ($attr{$name}{Ch_sort});
+			delete $attr{$name}{Ch_select} if ($attr{$name}{Ch_select});
+
 			readingsSingleUpdate($hash, "state" , $EPG_tt->{"DownloadFile"}, 1);
 		}
 
@@ -503,9 +511,7 @@ sub EPG_Attr() {
 			delete $attr{$name}{Ch_sort} if ($attrName eq "Ch_select" && $attr{$name}{Ch_sort});
 			delete $attr{$name}{Ch_select} if ($attrName eq "Ch_sort" && $attr{$name}{Ch_select});
 
-			foreach my $value (qw(Channels_available EPG_file_last_timestamp HTML HTML_data_counter Programm last_cmd)) {
-				delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
-			}
+			EPG_Reset_HELPER($hash);
 			readingsSingleUpdate($hash, "state" , $EPG_tt->{"Variant_mod"}, 1);
 		}
 	}
@@ -518,14 +524,7 @@ sub EPG_Attr() {
 			readingsDelete($hash,".associatedWith") if(ReadingsVal($name, ".associatedWith", undef));
 		}
 
-		if ( $attrName eq "Ch_select" || $attrName eq "Ch_sort" || $attrName eq "Variant"	) {
-			foreach my $value (qw(Channels_available EPG_file_last_timestamp HTML HTML_data_counter Programm last_cmd)) {
-				delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
-			}
-		}
-
-		delete $attr{$name}{Ch_sort} if ($attrName eq "Ch_select" && $attr{$name}{Ch_sort});
-		delete $attr{$name}{Ch_select} if ($attrName eq "Ch_sort" && $attr{$name}{Ch_select});
+		EPG_Reset_HELPER($hash) if ( $attrName eq "Variant"	);
 	}
 }
 
@@ -857,7 +856,7 @@ sub EPG_FW_Popup_Channels {
 	my @Channels_available = @{$hash->{helper}{Channels_available}};
 	my $HTML = $hash->{helper}{HTML};
 
-	Log3 $name, 4, "$name: FW_Channels is running";
+	Log3 $name, 4, "$name: FW_Popup_Channels is running";
 
 	$html_site_ch.= "<div><table id=\"FW_Popup_Channels\" class=\"block wide\">";
 	$html_site_ch.= "<tr class=\"even\"><th>".$EPG_tt->{"no"}."</th><th>".$EPG_tt->{"active"}."</th><th>".$EPG_tt->{"tv_name"}."</th><th>".$EPG_tt->{"tv_fav"}."</th></tr>";
@@ -908,9 +907,10 @@ sub EPG_FW_set_Attr_Channels {
 
 		FW_directNotify("FILTER=(room=$room|$name)", "#FHEMWEB:$FW_wname", "location.reload('true')", "");
 	} else {
-		Log3 $name, 4, "$name: FW_set_Attr_Channels new Channels set";
+		Log3 $name, 4, "$name: FW_set_Attr_Channels set Ch_select to $Ch_select";
 		delete $hash->{helper}{HTML} if(defined($hash->{helper}{HTML}));
 		CommandAttr($hash,"$name Ch_select $Ch_select");
+
 		if ($Ch_sort !~ /^[0,]+$/) {
 			CommandAttr($hash,"$name Ch_sort $Ch_sort");
 		} else {
@@ -1127,7 +1127,7 @@ sub EPG_Undef($$) {
 	RemoveInternalTimer($hash);
 	BlockingKill($hash->{helper}{RUNNING_PID}) if(defined($hash->{helper}{RUNNING_PID}));
 
-	foreach my $value (qw(Channels_available Ch_commands EPG_file_last_timestamp FTUI_data HTML HTML_data_counter HTML_reload last_cmd last_loaded programm)) {
+	foreach my $value (qw(Channels_available Ch_commands EPG_file_last_timestamp FTUI_data HTML HTML_data_counter HTML_reload automatic_cnt last_cmd last_loaded programm)) {
 		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
 	return undef;
@@ -1191,8 +1191,8 @@ sub EPG_nonBlock_available_channels($) {
 	my $additive_info = "";
 	my @Channels_available;
 
-  Log3 $name, 4, "$name: nonBlocking_available_channels running";
-  Log3 $name, 5, "$name: nonBlocking_available_channels string=$string";
+  Log3 $name, 4, "$name: nonBlock_available_channels running";
+  Log3 $name, 5, "$name: nonBlock_available_channels string=$string";
 
 	if (-e "./FHEM/EPG/$EPG_file_name") {
 		open (FileCheck,"<./FHEM/EPG/$EPG_file_name");
@@ -1203,7 +1203,7 @@ sub EPG_nonBlock_available_channels($) {
 				if ($line_cnt > 0 && $line_cnt <= 3) {
 					my $line = $_;
 					chomp ($line);
-					Log3 $name, 5, "$name: nonBlocking_available_channels line: ".$line;
+					Log3 $name, 5, "$name: nonBlock_available_channels line: ".$line;
 				}
 				# <tv generator-info-name="Rytec" generator-info-url="http://forums.openpli.org">
 				$Variant = "Rytec" if ($_ =~ /.*generator-info-name="Rytec".*/);
@@ -1221,24 +1221,24 @@ sub EPG_nonBlock_available_channels($) {
 					$Ch_id = $1 if ($_ =~ /\schannel="(.*)"\s?start=/);  # XMLTV.se
 
 					if ($_ =~ /<display-name lang=".*">(.*)<.*/) {
-						Log3 $name, 5, "$name: nonBlocking_available_channels id: $Ch_id -> display_name: ".$1;
+						Log3 $name, 5, "$name: nonBlock_available_channels id: $Ch_id -> display_name: ".$1;
 						$Ch_name = $1;
 					}
 
 					$Ch_name = $Ch_id if ($Variant eq "XMLTV.se");
-					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant and without ch_id. need help!" if (!$Ch_name && $line_cnt == 4);
-					Log3 $name, 4, "$name: nonBlocking_available_channels with variant=$Variant" if ($Ch_name && $line_cnt == 4);
+					Log3 $name, 4, "$name: nonBlock_available_channels with variant=$Variant and without ch_id. need help!" if (!$Ch_name && $line_cnt == 4);
+					Log3 $name, 4, "$name: nonBlock_available_channels with variant=$Variant" if ($Ch_name && $line_cnt == 4);
 
-					## nonBlocking_available_channels set helper ##
+					## nonBlock_available_channels set helper ##
 					if ($Ch_name && (not grep /^$Ch_name$/, @Channels_available)) {
-						Log3 $name, 5, "$name: nonBlocking_available_channels added $Ch_name with ch_id $Ch_id";
+						Log3 $name, 5, "$name: nonBlock_available_channels added $Ch_name with ch_id $Ch_id";
 						$hash->{helper}{Programm}{$Ch_id} = $Ch_name;
 						push(@Channels_available,$Ch_name);					
 					}
 				} elsif ($Variant eq "teXXas_RSS") {
 					$hash->{helper}{Programm} = "now" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/jetzt\//);
 					$hash->{helper}{Programm} = "20:15" if ($_ =~ /<link>http:\/\/www.texxas.de\/tv\/programm\/heute\/2015\//);
-					## nonBlocking_available_channels set helper ##
+					## nonBlock_available_channels set helper ##
 					my @RRS = split("<item>", $_);
 					my $remove = shift @RRS;
 					for (@RRS) {
@@ -1250,13 +1250,13 @@ sub EPG_nonBlock_available_channels($) {
 
 		if ($Variant eq "Rytec" || $Variant eq "TvProfil_XMLTV" || $Variant eq "WebGrab+Plus" || $Variant eq "XMLTV.se") {
 			$additive_info = JSON->new->utf8(0)->encode($hash->{helper}{Programm});
-			Log3 $name, 4, "$name: nonBlocking_available_channels read additive_info with variant $Variant";
+			Log3 $name, 4, "$name: nonBlock_available_channels read additive_info with variant $Variant";
 		} elsif ($Variant eq "teXXas_RSS") {
 			$additive_info = $hash->{helper}{Programm};	
 		}
 	} else {
 		$ok = $EPG_tt->{"available_ch_ok"};
-		Log3 $name, 4, "$name: nonBlocking_available_channels file $EPG_file_name not found, need help!";
+		Log3 $name, 4, "$name: nonBlock_available_channels file $EPG_file_name not found, need help!";
 	}
 
 	my $ch_available = join(";", @Channels_available);
@@ -1654,16 +1654,27 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	delete($hash->{helper}{RUNNING_PID});
 	$hash->{helper}{HTML_data_counter} = $EPG_cnt;
 
-	$json_HTML = eval {encode_utf8( $json_HTML )};
-	my $HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
-
-	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done found $EPG_cnt broadcast information";
 	if ($EPG_cnt == 0 && $EPG_auto_download eq "yes") {
+		$hash->{helper}{automatic_cnt}++;
+		## safety loop and STOP ##
+		if ($hash->{helper}{automatic_cnt} >= 2) {
+			$hash->{helper}{last_cmd} = "STOP";
+			Log3 $name, 2, "$name: nonBlock_loadEPG_v1Done automatic download STOP, no current data!";
+			readingsSingleUpdate($hash, "state", $EPG_tt->{"loadEPG_v1Done_STOP"},1);
+			return undef;
+		}
+
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done found 0 broadcast information, process automatic download started";
 		$hash->{helper}{last_cmd} = "automatic_loadFile";
 		CommandGet($hash, "$name loadFile");
 		return undef;
 	}
+
+	delete $hash->{helper}{automatic_cnt} if ($hash->{helper}{automatic_cnt});
+
+	Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done found $EPG_cnt broadcast information";
+	$json_HTML = eval {encode_utf8( $json_HTML )};
+	my $HTML = eval { decode_json( $json_HTML ) } if ($json_HTML ne "");
 
 	if ($@) {
 		Log3 $name, 3, "$name: nonBlock_loadEPG_v1Done, Please report it to the developer with the following line!";
@@ -1958,6 +1969,17 @@ sub EPG_readingsDeleteChannel($) {
 			Log3 $name, 5, "$name: readingsDeleteChannel delete $reading";
 			readingsDelete($hash,$reading);		
 		}
+	}
+}
+
+#####################
+sub EPG_Reset_HELPER($) {
+	my ($hash) = @_;
+	my $name = $hash->{NAME};
+	Log3 $name, 5, "$name: Reset_HELPER is running";
+
+	foreach my $value (qw(Channels_available EPG_file_last_timestamp HTML HTML_data_counter Programm last_cmd)) {
+		delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
 	}
 }
 
