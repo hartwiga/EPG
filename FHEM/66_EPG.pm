@@ -59,6 +59,9 @@ my %EPG_transtable_EN = (
 		"months10"            =>  "October",
 		"months11"            =>  "November",
 		"months12"            =>  "December",
+		## EPG_Attr ##
+		"DownloadFile"        =>  "Please search for new available channels.",
+		"Variant_mod"         =>  "Please search for new available channels. The names have changed.",
 		## EPG_Get ##
 		"get_available_ch"    =>  "available_channels search",
 		"get_loadEPG"         =>  "started",
@@ -138,6 +141,9 @@ my %EPG_transtable_EN = (
 		"months10"            =>  "Oktober",
 		"months11"            =>  "November",
 		"months12"            =>  "Dezember",
+		## EPG_Attr ##
+		"DownloadFile"        =>  "Bitte suchen Sie nach neuen verfügbaren Kanälen.",
+		"Variant_mod"         =>  "Bitte suchen Sie nach neuen verfügbaren Kanälen. Die Namen haben sich geändert.",
 		## EPG_Get ##
 		"get_available_ch"    =>  "verfügbare Kanäle werden gesucht",
 		"get_loadEPG"         =>  "gestartet",
@@ -184,7 +190,7 @@ my %EPG_transtable_EN = (
     ## EPG_nonBlock_available_channelsDone ##
 		"chDone_state1"       =>  "unbekannte Methode, Entwicklung notwendig",
 		"chDone_msg_OK"       =>  "EPG mit get loadEPG Befehlen verfügbar",
-		"chDone_msg_OK2"      =>  "verfügbaren Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
+		"chDone_msg_OK2"      =>  "verfügbare Kanäle geladen! Bitte mit dem Bedienfeld Ihren Kanal auswählen.",
 		## EPG_nonBlock_loadEPG_v1Done ##
 		"loadEPG_v1Done"      =>  "decode_json fehlgeschlagen, bitte benutze verbose 5 um mehr zu erkennen",
 		## EPG_nonBlock_loadEPG ##
@@ -433,6 +439,7 @@ sub EPG_Attr() {
 	my $hash = $defs{$name};
 	my $typ = $hash->{TYPE};
 	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $Variant = AttrVal($name, "Variant", undef);
 	
   ## in any attribute redefinition readjust language ##
 	my $lang = uc(AttrVal("global","language","EN"));
@@ -447,7 +454,11 @@ sub EPG_Attr() {
 			return "Your website entry must end with /\n\nexample: $attrValue/" if ($attrValue !~ /.*\/$/);
 			return "Your input must begin with http:// or https://" if ($attrValue !~ /^htt(p|ps):\/\//);
 		}
-		
+
+		if ($attrName eq "DownloadFile" && $attrValue ne AttrVal($name, "DownloadFile", undef)) {
+			readingsSingleUpdate($hash, "state" , $EPG_tt->{"DownloadFile"}, 1);
+		}
+
 		if ($attrName eq "HTTP_TimeOut") {
 			return "to small (standard 10)" if ($attrValue < 5);
 			return "to long (standard 10)" if ($attrValue > 90);
@@ -487,6 +498,16 @@ sub EPG_Attr() {
 				return "ERROR: $attrName are wrong format";
 			}
 		}
+
+		if ($attrName eq "Variant" && $attrValue ne $Variant) {
+			delete $attr{$name}{Ch_sort} if ($attrName eq "Ch_select" && $attr{$name}{Ch_sort});
+			delete $attr{$name}{Ch_select} if ($attrName eq "Ch_sort" && $attr{$name}{Ch_select});
+
+			foreach my $value (qw(Channels_available EPG_file_last_timestamp HTML HTML_data_counter Programm last_cmd)) {
+				delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
+			}
+			readingsSingleUpdate($hash, "state" , $EPG_tt->{"Variant_mod"}, 1);
+		}
 	}
 
 	if ($cmd eq "del") {
@@ -497,10 +518,14 @@ sub EPG_Attr() {
 			readingsDelete($hash,".associatedWith") if(ReadingsVal($name, ".associatedWith", undef));
 		}
 
-		if ($attrName eq "Variant") {
-			delete $hash->{helper}{Programm} if ($hash->{helper}{Programm});
-			return undef;
+		if ( $attrName eq "Ch_select" || $attrName eq "Ch_sort" || $attrName eq "Variant"	) {
+			foreach my $value (qw(Channels_available EPG_file_last_timestamp HTML HTML_data_counter Programm last_cmd)) {
+				delete $hash->{helper}{$value} if(defined($hash->{helper}{$value}));
+			}
 		}
+
+		delete $attr{$name}{Ch_sort} if ($attrName eq "Ch_select" && $attr{$name}{Ch_sort});
+		delete $attr{$name}{Ch_select} if ($attrName eq "Ch_sort" && $attr{$name}{Ch_select});
 	}
 }
 
@@ -903,7 +928,7 @@ sub EPG_FW_set_Attr_Channels {
 				$HTML->{$Ch_select_array[$i]}{Ch_name} = $Ch_select_array[$i];         # need, if channel not PEG Data (sort $HTML)
 			}
 		}
-		CommandGet($hash, "$name $hash->{helper}{last_cmd}");
+		CommandGet($hash, "$name $hash->{helper}{last_cmd}") if ($hash->{helper}{last_cmd});
 	}
 }
 
@@ -1002,7 +1027,7 @@ sub EPG_ParseHttpResponse($$$) {
 	HttpUtils_Close($http_param);
 
 	# loadEPG_now if cmd automatic_loadFile after "found 0 broadcast information, process automatic download started"
-	CommandGet($hash, "$name loadEPG_now") if ($EPG_auto_download eq "yes" && $hash->{helper}{last_cmd} eq "automatic_loadFile");
+	CommandGet($hash, "$name loadEPG_now") if ($EPG_auto_download eq "yes" && $hash->{helper}{last_cmd} && $hash->{helper}{last_cmd} eq "automatic_loadFile");
 }
 
 #####################
