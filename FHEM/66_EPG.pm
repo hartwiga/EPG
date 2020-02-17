@@ -1,5 +1,5 @@
 #################################################################
-# $Id: 66_EPG.pm 21010 2020-02-16 18:10:00Z HomeAuto_User $
+# $Id: 66_EPG.pm 21010 2020-02-16 23:10:00Z HomeAuto_User $
 #
 # Github - FHEM Home Automation System
 # https://github.com/fhem/EPG
@@ -19,7 +19,6 @@
 # - refresh browser window, any browser no refreh
 #   - YES - Mozilla Firefox 72.0.2
 #   - NO  - Microsoft Edge 
-# - Attribut EPG_auto_download hat den Wert yes, aber hat keine neue Datei runtergeladen ... loadFile hat dann dafür gesorgt ... keine Ahnung, ob es hier nicht noch eine neue Möglichkeit gibt ...
 #################################################################
 
 package main;
@@ -310,7 +309,7 @@ sub EPG_Get($$$@) {
 	my $DownloadFile = AttrVal($name, "DownloadFile", undef);
 	my $DownloadURL = AttrVal($name, "DownloadURL", undef);
 	my $Variant = AttrVal($name, "Variant", "unknown");
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 	my @Channels_available;
 	@Channels_available = \@{$hash->{helper}{Channels_available}} if ($hash->{helper}{Channels_available});
 
@@ -440,7 +439,7 @@ sub EPG_Attr() {
 	my ($cmd, $name, $attrName, $attrValue) = @_;
 	my $hash = $defs{$name};
 	my $typ = $hash->{TYPE};
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 	my $Variant = AttrVal($name, "Variant", undef);
 	
   ## in any attribute redefinition readjust language ##
@@ -974,7 +973,7 @@ sub EPG_ParseHttpResponse($$$) {
 	my $state = $EPG_tt->{"ParseHttp_state1"};
 	my $FileAge = undef;
 	my $EPG_auto_download = AttrVal($name, "EPG_auto_download", "no");
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 
 	Log3 $name, 5, "$name: ParseHttpResponse - error: $err";
 	Log3 $name, 5, "$name: ParseHttpResponse - http code: ".$http_param->{code};
@@ -1274,7 +1273,7 @@ sub EPG_nonBlock_available_channelsDone($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my $EPG_auto_update = AttrVal($name, "EPG_auto_update", "no");
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 
 	return unless(defined($string));
   Log3 $name, 4, "$name: nonBlock_available_channelsDone running";
@@ -1646,7 +1645,7 @@ sub EPG_nonBlock_loadEPG_v1Done($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my $room = AttrVal($name, "room", "");
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 
   Log3 $name, 4, "$name: nonBlock_loadEPG_v1Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v1Done string=$string";
@@ -1888,7 +1887,7 @@ sub EPG_nonBlock_loadEPG_v2Done($) {
 	my $Ch_select = AttrVal($name, "Ch_select", undef);
 	my @Ch_select_array = split(",",$Ch_select) if ($Ch_select);
 	my $room = AttrVal($name, "room", "");
-	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;          # first WorkaRound
+	my $FW_wname = !$FW_wname ? "WEB" : $FW_wname;
 
 	Log3 $name, 4, "$name: nonBlock_loadEPG_v2Done running, $cmd from file $EPG_file_name";
   Log3 $name, 5, "$name: nonBlock_loadEPG_v2Done string=$string";
